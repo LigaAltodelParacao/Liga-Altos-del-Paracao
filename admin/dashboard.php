@@ -181,7 +181,7 @@ $ultimos_resultados = $stmt->fetchAll();
                                         </a>
                                     </div>
                                     <div class="col-md-4 mb-3">
-                                        <a href="planillas.php?action=generate" class="btn btn-secondary w-100">
+                                        <a href="descargar_planillas.php?action=generate" class="btn btn-secondary w-100">
                                             <i class="fas fa-file-alt"></i><br>
                                             Generar Planillas
                                         </a>

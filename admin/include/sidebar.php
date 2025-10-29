@@ -10,7 +10,7 @@ $user = getCurrentUser();
         <a class="nav-link <?php echo $current_page == 'campeonatos.php' ? 'active' : ''; ?>" href="campeonatos.php">
             <i class="fas fa-trophy"></i> Campeonatos
         </a>
-        <a class="nav-link <?php echo $current_page == 'campeonatos_zonas.php' ? 'active' : ''; ?>" href="campeonatos_zonas.php">
+        <a class="nav-link <?php echo $current_page == 'torneos_zonas.php' ? 'active' : ''; ?>" href="torneos_zonas.php">
             <i class="fas fa-layer-group"></i> Campeonatos con Zonas
         </a>
         <a class="nav-link <?php echo $current_page == 'categorias.php' ? 'active' : ''; ?>" href="categorias.php">

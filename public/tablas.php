@@ -16,9 +16,67 @@ $categorias = $stmt->fetchAll();
 // Categoría seleccionada
 $categoria_id = $_GET['categoria'] ?? ($categorias[0]['id'] ?? null);
 
-// Obtener tabla de posiciones
-$tabla_posiciones = [];
+// *** NUEVA LÓGICA: Detectar si es torneo con zonas ***
+$es_torneo_zonas = false;
+$formato_zonas = null;
+$zonas = [];
+
 if ($categoria_id) {
+    // Buscar si existe un formato de zonas para esta categoría
+    $stmt = $db->prepare("
+        SELECT cf.* 
+        FROM campeonatos_formato cf
+        JOIN categorias cat ON cf.campeonato_id = cat.campeonato_id
+        WHERE cat.id = ? AND cf.activo = 1
+        LIMIT 1
+    ");
+    $stmt->execute([$categoria_id]);
+    $formato_zonas = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($formato_zonas) {
+        $es_torneo_zonas = true;
+        
+        // Obtener zonas
+        $stmt = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
+        $stmt->execute([$formato_zonas['id']]);
+        $zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+}
+
+// Obtener información de la categoría seleccionada
+$categoria_actual = null;
+foreach ($categorias as $cat) {
+    if ($cat['id'] == $categoria_id) {
+        $categoria_actual = $cat;
+        break;
+    }
+}
+
+// *** SI ES TORNEO CON ZONAS ***
+$tablas_por_zona = [];
+if ($es_torneo_zonas && !empty($zonas)) {
+    foreach ($zonas as $zona) {
+        $stmt = $db->prepare("
+            SELECT 
+                ez.*,
+                e.nombre as equipo,
+                e.logo
+            FROM equipos_zonas ez
+            JOIN equipos e ON ez.equipo_id = e.id
+            WHERE ez.zona_id = ?
+            ORDER BY ez.puntos DESC, ez.diferencia_gol DESC, ez.goles_favor DESC, e.nombre ASC
+        ");
+        $stmt->execute([$zona['id']]);
+        $tablas_por_zona[$zona['id']] = [
+            'zona' => $zona,
+            'equipos' => $stmt->fetchAll(PDO::FETCH_ASSOC)
+        ];
+    }
+}
+
+// *** SI ES TORNEO NORMAL ***
+$tabla_posiciones = [];
+if (!$es_torneo_zonas && $categoria_id) {
     $stmt = $db->prepare("
         SELECT 
             e.id as equipo_id,
@@ -67,15 +125,6 @@ if ($categoria_id) {
     $stmt->execute([$categoria_id]);
     $tabla_posiciones = $stmt->fetchAll();
 }
-
-// Obtener información de la categoría seleccionada
-$categoria_actual = null;
-foreach ($categorias as $cat) {
-    if ($cat['id'] == $categoria_id) {
-        $categoria_actual = $cat;
-        break;
-    }
-}
 ?>
 
 <!DOCTYPE html>
@@ -100,46 +149,20 @@ foreach ($categorias as $cat) {
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="resultados.php">Resultados</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="tablas.php">Posiciones</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="goleadores.php">Goleadores</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="fixture.php">Fixture</a>
-                    </li>
-					<li class="nav-item">
-                        <a class="nav-link" href="sanciones.php">Sanciones</a>
-                    </li>
-					<li class="nav-item">
-                        <a class="nav-link" href="historial_equipos.php">Equipos</a>
-                    </li>
-					<li class="nav-item">
-                        <a class="nav-link" href="fairplay.php">Fairplay</a>
-                    </li>
+                    <li class="nav-item"><a class="nav-link" href="resultados.php">Resultados</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="tablas.php">Posiciones</a></li>
+                    <li class="nav-item"><a class="nav-link" href="goleadores.php">Goleadores</a></li>
+                    <li class="nav-item"><a class="nav-link" href="fixture.php">Fixture</a></li>
+                    <li class="nav-item"><a class="nav-link" href="sanciones.php">Sanciones</a></li>
+                    <li class="nav-item"><a class="nav-link" href="historial_equipos.php">Equipos</a></li>
+                    <li class="nav-item"><a class="nav-link" href="fairplay.php">Fairplay</a></li>
                 </ul>
                 <ul class="navbar-nav">
                     <?php if (isLoggedIn()): ?>
-                        <li class="nav-item">
-                            <a class="nav-link" href="admin/dashboard.php">
-                                <i class="fas fa-tachometer-alt"></i> Panel Admin
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="logout.php">
-                                <i class="fas fa-sign-out-alt"></i> Salir
-                            </a>
-                        </li>
+                        <li class="nav-item"><a class="nav-link" href="admin/dashboard.php"><i class="fas fa-tachometer-alt"></i> Panel Admin</a></li>
+                        <li class="nav-item"><a class="nav-link" href="logout.php"><i class="fas fa-sign-out-alt"></i> Salir</a></li>
                     <?php else: ?>
-                        <li class="nav-item">
-                            <a class="nav-link" href="login.php">
-                                <i class="fas fa-sign-in-alt"></i> Ingresar
-                            </a>
-                        </li>
+                        <li class="nav-item"><a class="nav-link" href="login.php"><i class="fas fa-sign-in-alt"></i> Ingresar</a></li>
                     <?php endif; ?>
                 </ul>
             </div>
@@ -150,7 +173,7 @@ foreach ($categorias as $cat) {
         <div class="row">
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h2><i class="fas fa-list"></i> Tablas de Posiciones</h2>                    
+                    <h2><i class="fas fa-list"></i> Tablas de Posiciones</h2>
                 </div>
 
                 <?php if (empty($categorias)): ?>
@@ -180,90 +203,206 @@ foreach ($categorias as $cat) {
                     </div>
 
                     <?php if ($categoria_actual): ?>
-                        <div class="card">
-                            <div class="card-header bg-success text-white">
-                                <h4 class="mb-0">
-                                    <i class="fas fa-trophy"></i> 
-                                    <?php echo htmlspecialchars($categoria_actual['campeonato_nombre'] . ' - ' . $categoria_actual['nombre']); ?>
-                                </h4>
+                        <?php if ($es_torneo_zonas): ?>
+                            <!-- *** VISTA DE TORNEO CON ZONAS *** -->
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> Este es un torneo con <strong><?= count($zonas) ?> zonas</strong> y fase eliminatoria
                             </div>
-                            <div class="card-body p-0">
-                                <?php if (empty($tabla_posiciones)): ?>
-                                    <div class="p-4 text-center">
-                                        <i class="fas fa-list fa-3x text-muted mb-3"></i>
-                                        <h5 class="text-muted">No hay equipos en esta categoría</h5>
+
+                            <!-- Tabs de Zonas -->
+                            <ul class="nav nav-tabs mb-3" id="zonasTab" role="tablist">
+                                <?php foreach ($zonas as $index => $zona): ?>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link <?= $index === 0 ? 'active' : '' ?>" 
+                                                id="zona-<?= $zona['id'] ?>-tab" 
+                                                data-bs-toggle="tab" 
+                                                data-bs-target="#zona-<?= $zona['id'] ?>" 
+                                                type="button">
+                                            <?= htmlspecialchars($zona['nombre']) ?>
+                                        </button>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+
+                            <!-- Contenido de Tabs -->
+                            <div class="tab-content" id="zonasTabContent">
+                                <?php foreach ($zonas as $index => $zona): ?>
+                                    <div class="tab-pane fade <?= $index === 0 ? 'show active' : '' ?>" 
+                                         id="zona-<?= $zona['id'] ?>" 
+                                         role="tabpanel">
+                                        <div class="card">
+                                            <div class="card-header bg-success text-white">
+                                                <h4 class="mb-0">
+                                                    <i class="fas fa-trophy"></i> 
+                                                    <?= htmlspecialchars($zona['nombre']) ?>
+                                                </h4>
+                                            </div>
+                                            <div class="card-body p-0">
+                                                <?php if (empty($tablas_por_zona[$zona['id']]['equipos'])): ?>
+                                                    <div class="p-4 text-center">
+                                                        <i class="fas fa-list fa-3x text-muted mb-3"></i>
+                                                        <h5 class="text-muted">No hay equipos en esta zona</h5>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <div class="table-responsive">
+                                                        <table class="table table-hover mb-0">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th class="text-center">Pos</th>
+                                                                    <th>Equipo</th>
+                                                                    <th class="text-center">PJ</th>
+                                                                    <th class="text-center">G</th>
+                                                                    <th class="text-center">E</th>
+                                                                    <th class="text-center">P</th>
+                                                                    <th class="text-center">GF</th>
+                                                                    <th class="text-center">GC</th>
+                                                                    <th class="text-center">DG</th>
+                                                                    <th class="text-center">Pts</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <?php foreach ($tablas_por_zona[$zona['id']]['equipos'] as $pos => $equipo): ?>
+                                                                    <?php
+                                                                    $posicion = $pos + 1;
+                                                                    $clase_posicion = '';
+                                                                    if ($posicion == 1) $clase_posicion = 'position-1';
+                                                                    elseif ($posicion == 2) $clase_posicion = 'position-2';
+                                                                    elseif ($posicion == 3) $clase_posicion = 'position-3';
+                                                                    ?>
+                                                                    <tr>
+                                                                        <td class="text-center">
+                                                                            <span class="position-number <?php echo $clase_posicion; ?>">
+                                                                                <?php echo $posicion; ?>
+                                                                            </span>
+                                                                        </td>
+                                                                        <td>
+                                                                            <div class="d-flex align-items-center">
+                                                                                <?php if ($equipo['logo']): ?>
+                                                                                    <img src="../uploads/<?php echo htmlspecialchars($equipo['logo']); ?>" 
+                                                                                         alt="Logo" class="me-2" width="30" height="30" 
+                                                                                         style="object-fit: cover; border-radius: 50%;">
+                                                                                <?php else: ?>
+                                                                                    <div class="bg-secondary rounded-circle me-2 d-flex align-items-center justify-content-center" 
+                                                                                         style="width: 30px; height: 30px;">
+                                                                                        <i class="fas fa-shield-alt text-white"></i>
+                                                                                    </div>
+                                                                                <?php endif; ?>
+                                                                                <strong><?php echo htmlspecialchars($equipo['equipo']); ?></strong>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td class="text-center"><?php echo $equipo['partidos_jugados']; ?></td>
+                                                                        <td class="text-center text-success fw-bold"><?php echo $equipo['partidos_ganados']; ?></td>
+                                                                        <td class="text-center text-warning fw-bold"><?php echo $equipo['partidos_empatados']; ?></td>
+                                                                        <td class="text-center text-danger fw-bold"><?php echo $equipo['partidos_perdidos']; ?></td>
+                                                                        <td class="text-center"><?php echo $equipo['goles_favor']; ?></td>
+                                                                        <td class="text-center"><?php echo $equipo['goles_contra']; ?></td>
+                                                                        <td class="text-center">
+                                                                            <span class="<?php echo $equipo['diferencia_gol'] > 0 ? 'text-success' : ($equipo['diferencia_gol'] < 0 ? 'text-danger' : ''); ?>">
+                                                                                <?php echo $equipo['diferencia_gol'] > 0 ? '+' : ''; ?><?php echo $equipo['diferencia_gol']; ?>
+                                                                            </span>
+                                                                        </td>
+                                                                        <td class="text-center">
+                                                                            <span class="badge bg-primary fs-6"><?php echo $equipo['puntos']; ?></span>
+                                                                        </td>
+                                                                    </tr>
+                                                                <?php endforeach; ?>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
                                     </div>
-                                <?php else: ?>
-                                    <div class="table-responsive">
-                                        <table class="table table-hover mb-0">
-                                            <thead>
-                                                <tr>
-                                                    <th class="text-center">Pos</th>
-                                                    <th>Equipo</th>
-                                                    <th class="text-center">PJ</th>
-                                                    <th class="text-center">G</th>
-                                                    <th class="text-center">E</th>
-                                                    <th class="text-center">P</th>
-                                                    <th class="text-center">GF</th>
-                                                    <th class="text-center">GC</th>
-                                                    <th class="text-center">DG</th>
-                                                    <th class="text-center">Pts</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($tabla_posiciones as $index => $equipo): ?>
-                                                    <?php
-                                                    $posicion = $index + 1;
-                                                    $clase_posicion = '';
-                                                    if ($posicion == 1) $clase_posicion = 'position-1';
-                                                    elseif ($posicion == 2) $clase_posicion = 'position-2';
-                                                    elseif ($posicion == 3) $clase_posicion = 'position-3';
-                                                    elseif ($posicion <= 4) $clase_posicion = 'position-champion';
-                                                    elseif ($posicion > count($tabla_posiciones) - 2) $clase_posicion = 'position-relegation';
-                                                    ?>
+                                <?php endforeach; ?>
+                            </div>
+
+                        <?php else: ?>
+                            <!-- *** VISTA DE TORNEO NORMAL *** -->
+                            <div class="card">
+                                <div class="card-header bg-success text-white">
+                                    <h4 class="mb-0">
+                                        <i class="fas fa-trophy"></i> 
+                                        <?php echo htmlspecialchars($categoria_actual['campeonato_nombre'] . ' - ' . $categoria_actual['nombre']); ?>
+                                    </h4>
+                                </div>
+                                <div class="card-body p-0">
+                                    <?php if (empty($tabla_posiciones)): ?>
+                                        <div class="p-4 text-center">
+                                            <i class="fas fa-list fa-3x text-muted mb-3"></i>
+                                            <h5 class="text-muted">No hay equipos en esta categoría</h5>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="table-responsive">
+                                            <table class="table table-hover mb-0">
+                                                <thead>
                                                     <tr>
-                                                        <td class="text-center">
-                                                            <span class="position-number <?php echo $clase_posicion; ?>">
-                                                                <?php echo $posicion; ?>
-                                                            </span>
-                                                        </td>
-                                                        <td>
-                                                            <div class="d-flex align-items-center">
-                                                                <?php if ($equipo['logo']): ?>
-                                                                    <img src="../uploads/<?php echo htmlspecialchars($equipo['logo']); ?>" 
-                                                                         alt="Logo" class="me-2" width="30" height="30" 
-                                                                         style="object-fit: cover; border-radius: 50%;">
-                                                                <?php else: ?>
-                                                                    <div class="bg-secondary rounded-circle me-2 d-flex align-items-center justify-content-center" 
-                                                                         style="width: 30px; height: 30px;">
-                                                                        <i class="fas fa-shield-alt text-white"></i>
-                                                                    </div>
-                                                                <?php endif; ?>
-                                                                <strong><?php echo htmlspecialchars($equipo['equipo']); ?></strong>
-                                                            </div>
-                                                        </td>
-                                                        <td class="text-center"><?php echo $equipo['partidos_jugados']; ?></td>
-                                                        <td class="text-center text-success fw-bold"><?php echo $equipo['ganados']; ?></td>
-                                                        <td class="text-center text-warning fw-bold"><?php echo $equipo['empatados']; ?></td>
-                                                        <td class="text-center text-danger fw-bold"><?php echo $equipo['perdidos']; ?></td>
-                                                        <td class="text-center"><?php echo $equipo['goles_favor']; ?></td>
-                                                        <td class="text-center"><?php echo $equipo['goles_contra']; ?></td>
-                                                        <td class="text-center">
-                                                            <span class="<?php echo $equipo['diferencia_goles'] > 0 ? 'text-success' : ($equipo['diferencia_goles'] < 0 ? 'text-danger' : ''); ?>">
-                                                                <?php echo $equipo['diferencia_goles'] > 0 ? '+' : ''; ?><?php echo $equipo['diferencia_goles']; ?>
-                                                            </span>
-                                                        </td>
-                                                        <td class="text-center">
-                                                            <span class="badge bg-primary fs-6"><?php echo $equipo['puntos']; ?></span>
-                                                        </td>
+                                                        <th class="text-center">Pos</th>
+                                                        <th>Equipo</th>
+                                                        <th class="text-center">PJ</th>
+                                                        <th class="text-center">G</th>
+                                                        <th class="text-center">E</th>
+                                                        <th class="text-center">P</th>
+                                                        <th class="text-center">GF</th>
+                                                        <th class="text-center">GC</th>
+                                                        <th class="text-center">DG</th>
+                                                        <th class="text-center">Pts</th>
                                                     </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                <?php endif; ?>
+                                                </thead>
+                                                <tbody>
+                                                    <?php foreach ($tabla_posiciones as $index => $equipo): ?>
+                                                        <?php
+                                                        $posicion = $index + 1;
+                                                        $clase_posicion = '';
+                                                        if ($posicion == 1) $clase_posicion = 'position-1';
+                                                        elseif ($posicion == 2) $clase_posicion = 'position-2';
+                                                        elseif ($posicion == 3) $clase_posicion = 'position-3';
+                                                        elseif ($posicion <= 4) $clase_posicion = 'position-champion';
+                                                        elseif ($posicion > count($tabla_posiciones) - 2) $clase_posicion = 'position-relegation';
+                                                        ?>
+                                                        <tr>
+                                                            <td class="text-center">
+                                                                <span class="position-number <?php echo $clase_posicion; ?>">
+                                                                    <?php echo $posicion; ?>
+                                                                </span>
+                                                            </td>
+                                                            <td>
+                                                                <div class="d-flex align-items-center">
+                                                                    <?php if ($equipo['logo']): ?>
+                                                                        <img src="../uploads/<?php echo htmlspecialchars($equipo['logo']); ?>" 
+                                                                             alt="Logo" class="me-2" width="30" height="30" 
+                                                                             style="object-fit: cover; border-radius: 50%;">
+                                                                    <?php else: ?>
+                                                                        <div class="bg-secondary rounded-circle me-2 d-flex align-items-center justify-content-center" 
+                                                                             style="width: 30px; height: 30px;">
+                                                                            <i class="fas fa-shield-alt text-white"></i>
+                                                                        </div>
+                                                                    <?php endif; ?>
+                                                                    <strong><?php echo htmlspecialchars($equipo['equipo']); ?></strong>
+                                                                </div>
+                                                            </td>
+                                                            <td class="text-center"><?php echo $equipo['partidos_jugados']; ?></td>
+                                                            <td class="text-center text-success fw-bold"><?php echo $equipo['ganados']; ?></td>
+                                                            <td class="text-center text-warning fw-bold"><?php echo $equipo['empatados']; ?></td>
+                                                            <td class="text-center text-danger fw-bold"><?php echo $equipo['perdidos']; ?></td>
+                                                            <td class="text-center"><?php echo $equipo['goles_favor']; ?></td>
+                                                            <td class="text-center"><?php echo $equipo['goles_contra']; ?></td>
+                                                            <td class="text-center">
+                                                                <span class="<?php echo $equipo['diferencia_goles'] > 0 ? 'text-success' : ($equipo['diferencia_goles'] < 0 ? 'text-danger' : ''); ?>">
+                                                                    <?php echo $equipo['diferencia_goles'] > 0 ? '+' : ''; ?><?php echo $equipo['diferencia_goles']; ?>
+                                                                </span>
+                                                            </td>
+                                                            <td class="text-center">
+                                                                <span class="badge bg-primary fs-6"><?php echo $equipo['puntos']; ?></span>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
                             </div>
-                        </div>
+                        <?php endif; ?>
 
                         <!-- Leyenda -->
                         <div class="card mt-3">
@@ -318,22 +457,6 @@ foreach ($categorias as $cat) {
     <script>
         function cambiarCategoria(categoriaId) {
             window.location.href = 'tablas.php?categoria=' + categoriaId;
-        }
-
-        function exportarPDF() {
-            <?php if ($categoria_id): ?>
-                window.open('export/tabla_pdf.php?categoria=<?php echo $categoria_id; ?>', '_blank');
-            <?php else: ?>
-                alert('Selecciona una categoría primero');
-            <?php endif; ?>
-        }
-
-        function exportarExcel() {
-            <?php if ($categoria_id): ?>
-                window.location.href = 'export/tabla_excel.php?categoria=<?php echo $categoria_id; ?>';
-            <?php else: ?>
-                alert('Selecciona una categoría primero');
-            <?php endif; ?>
         }
 
         // Auto actualización cada 2 minutos
