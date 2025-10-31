@@ -33,34 +33,33 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $db->beginTransaction();
             
             $partido_id = (int)$_POST['partido_id'];
+            $tipo_partido = $_POST['tipo_partido'] ?? 'normal'; // Nuevo: distinguir tipo de partido
             $goles_local = (int)$_POST['goles_local'];
             $goles_visitante = (int)$_POST['goles_visitante'];
             $observaciones = trim($_POST['observaciones'] ?? '');
 
+            // Determinar qué tabla actualizar
+            $tabla_partidos = ($tipo_partido === 'zona') ? 'partidos_zona' : 'partidos';
+            
             // Actualizar resultado del partido
             $stmt = $db->prepare("
-                UPDATE partidos 
+                UPDATE {$tabla_partidos} 
                 SET goles_local = ?, goles_visitante = ?, observaciones = ?, estado = 'finalizado', finalizado_at = NOW()
                 WHERE id = ?
             ");
             $stmt->execute([$goles_local, $goles_visitante, $observaciones, $partido_id]);
 
             // === REGISTRAR JUGADORES QUE JUGARON ===
-            $stmt = $db->prepare("DELETE FROM jugadores_partido WHERE partido_id = ?");
-            $stmt->execute([$partido_id]);
+            $stmt = $db->prepare("DELETE FROM jugadores_partido WHERE partido_id = ? AND tipo_partido = ?");
+            $stmt->execute([$partido_id, $tipo_partido]);
 
-            // Obtener todos los jugadores de ambos equipos
-            $stmt = $db->prepare("
-                SELECT equipo_local_id, equipo_visitante_id 
-                FROM partidos 
-                WHERE id = ?
-            ");
+            // Obtener equipos del partido
+            $stmt = $db->prepare("SELECT equipo_local_id, equipo_visitante_id FROM {$tabla_partidos} WHERE id = ?");
             $stmt->execute([$partido_id]);
             $partido_info = $stmt->fetch();
             
             // Función para procesar jugadores por equipo
-            $procesarJugadores = function($equipo_id, $numeros_array) use ($db, $partido_id) {
-                // Obtener todos los jugadores del equipo
+            $procesarJugadores = function($equipo_id, $numeros_array, $tipo_partido, $partido_id) use ($db) {
                 $stmt = $db->prepare("SELECT id FROM jugadores WHERE equipo_id = ? AND activo = 1");
                 $stmt->execute([$equipo_id]);
                 $todos_jugadores = $stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -77,23 +76,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     // Si NO hay números cargados = TODOS jugaron con número 0
                     foreach ($todos_jugadores as $jug_id) {
                         $stmt = $db->prepare("
-                            INSERT INTO jugadores_partido (partido_id, jugador_id, numero_camiseta)
-                            VALUES (?, ?, 0)
+                            INSERT INTO jugadores_partido (partido_id, jugador_id, numero_camiseta, tipo_partido)
+                            VALUES (?, ?, 0, ?)
                         ");
-                        $stmt->execute([$partido_id, $jug_id]);
+                        $stmt->execute([$partido_id, $jug_id, $tipo_partido]);
                     }
                 } else {
                     // Solo registrar los que tienen número
                     foreach ($numeros_array as $num) {
                         if (!empty($num['numero']) && !empty($num['jugador_id'])) {
                             $stmt = $db->prepare("
-                                INSERT INTO jugadores_partido (partido_id, jugador_id, numero_camiseta)
-                                VALUES (?, ?, ?)
+                                INSERT INTO jugadores_partido (partido_id, jugador_id, numero_camiseta, tipo_partido)
+                                VALUES (?, ?, ?, ?)
                             ");
                             $stmt->execute([
                                 $partido_id, 
                                 (int)$num['jugador_id'],
-                                (int)$num['numero']
+                                (int)$num['numero'],
+                                $tipo_partido
                             ]);
                         }
                     }
@@ -102,15 +102,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             // Procesar local y visitante
             if (!empty($_POST['numeros_local'])) {
-                $procesarJugadores($partido_info['equipo_local_id'], $_POST['numeros_local']);
+                $procesarJugadores($partido_info['equipo_local_id'], $_POST['numeros_local'], $tipo_partido, $partido_id);
             }
             if (!empty($_POST['numeros_visitante'])) {
-                $procesarJugadores($partido_info['equipo_visitante_id'], $_POST['numeros_visitante']);
+                $procesarJugadores($partido_info['equipo_visitante_id'], $_POST['numeros_visitante'], $tipo_partido, $partido_id);
             }
 
             // Limpiar eventos anteriores del partido
-            $stmt = $db->prepare("DELETE FROM eventos_partido WHERE partido_id = ?");
-            $stmt->execute([$partido_id]);
+            $stmt = $db->prepare("DELETE FROM eventos_partido WHERE partido_id = ? AND tipo_partido = ?");
+            $stmt->execute([$partido_id, $tipo_partido]);
 
             $tarjetas_por_jugador = [];
 
@@ -118,8 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if (!empty($_POST['goles']) && is_array($_POST['goles'])) {
                 foreach ($_POST['goles'] as $gol) {
                     if (!empty($gol['jugador_id'])) {
-                        $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto) VALUES (?, ?, 'gol', 0)");
-                        $stmt->execute([$partido_id, (int)$gol['jugador_id']]);
+                        $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto, tipo_partido) VALUES (?, ?, 'gol', 0, ?)");
+                        $stmt->execute([$partido_id, (int)$gol['jugador_id'], $tipo_partido]);
                     }
                 }
             }
@@ -131,8 +131,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $jugador_id = (int)$tarjeta['jugador_id'];
                         $tipo = $tarjeta['tipo'];
                         
-                        $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto) VALUES (?, ?, ?, 0)");
-                        $stmt->execute([$partido_id, $jugador_id, $tipo]);
+                        $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto, tipo_partido) VALUES (?, ?, ?, 0, ?)");
+                        $stmt->execute([$partido_id, $jugador_id, $tipo, $tipo_partido]);
 
                         if (!isset($tarjetas_por_jugador[$jugador_id])) {
                             $tarjetas_por_jugador[$jugador_id] = ['amarillas' => 0, 'rojas' => 0];
@@ -150,11 +150,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             // === CORREGIR DOBLE AMARILLA ===
             foreach ($tarjetas_por_jugador as $jugador_id => $stats) {
                 if ($stats['amarillas'] >= 2) {
-                    $stmt = $db->prepare("DELETE FROM eventos_partido WHERE partido_id = ? AND jugador_id = ? AND tipo_evento = 'amarilla'");
-                    $stmt->execute([$partido_id, $jugador_id]);
+                    $stmt = $db->prepare("DELETE FROM eventos_partido WHERE partido_id = ? AND jugador_id = ? AND tipo_evento = 'amarilla' AND tipo_partido = ?");
+                    $stmt->execute([$partido_id, $jugador_id, $tipo_partido]);
                     
-                    $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto, observaciones) VALUES (?, ?, 'roja', 0, 'Doble amarilla')");
-                    $stmt->execute([$partido_id, $jugador_id]);
+                    $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto, observaciones, tipo_partido) VALUES (?, ?, 'roja', 0, 'Doble amarilla', ?)");
+                    $stmt->execute([$partido_id, $jugador_id, $tipo_partido]);
                 }
             }
 
@@ -169,13 +169,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
 
             // === 4 AMARILLAS ACUMULADAS ===
-            $stmt = $db->prepare("
-                SELECT cat.campeonato_id
-                FROM partidos p
-                JOIN fechas f ON p.fecha_id = f.id
-                JOIN categorias cat ON f.categoria_id = cat.id
-                WHERE p.id = ?
-            ");
+            // Obtener campeonato_id según tipo de partido
+            if ($tipo_partido === 'zona') {
+                $stmt = $db->prepare("
+                    SELECT cf.campeonato_id
+                    FROM partidos_zona pz
+                    JOIN zonas z ON pz.zona_id = z.id
+                    JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                    WHERE pz.id = ?
+                ");
+            } else {
+                $stmt = $db->prepare("
+                    SELECT cat.campeonato_id
+                    FROM partidos p
+                    JOIN fechas f ON p.fecha_id = f.id
+                    JOIN categorias cat ON f.categoria_id = cat.id
+                    WHERE p.id = ?
+                ");
+            }
             $stmt->execute([$partido_id]);
             $campeonato_id = $stmt->fetchColumn();
 
@@ -191,25 +202,37 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $jugadores_campeonato = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
                 foreach ($jugadores_campeonato as $jugador_id) {
+                    // Contar amarillas en ambos tipos de partidos
                     $stmt = $db->prepare("
                         SELECT COUNT(*)
                         FROM eventos_partido ev
-                        JOIN partidos p ON ev.partido_id = p.id
-                        JOIN fechas f ON p.fecha_id = f.id
-                        JOIN categorias cat ON f.categoria_id = cat.id
-                        WHERE cat.campeonato_id = ? 
-                        AND ev.jugador_id = ? 
+                        WHERE ev.jugador_id = ? 
                         AND ev.tipo_evento = 'amarilla'
                         AND ev.partido_id NOT IN (
                             SELECT partido_id 
                             FROM eventos_partido 
                             WHERE jugador_id = ev.jugador_id 
                             AND tipo_evento = 'amarilla'
-                            GROUP BY partido_id
+                            GROUP BY partido_id, tipo_partido
                             HAVING COUNT(*) >= 2
                         )
+                        AND (
+                            (ev.tipo_partido = 'normal' AND ev.partido_id IN (
+                                SELECT p.id FROM partidos p
+                                JOIN fechas f ON p.fecha_id = f.id
+                                JOIN categorias cat ON f.categoria_id = cat.id
+                                WHERE cat.campeonato_id = ?
+                            ))
+                            OR
+                            (ev.tipo_partido = 'zona' AND ev.partido_id IN (
+                                SELECT pz.id FROM partidos_zona pz
+                                JOIN zonas z ON pz.zona_id = z.id
+                                JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                                WHERE cf.campeonato_id = ?
+                            ))
+                        )
                     ");
-                    $stmt->execute([$campeonato_id, $jugador_id]);
+                    $stmt->execute([$jugador_id, $campeonato_id, $campeonato_id]);
                     $amarillas = (int)$stmt->fetchColumn();
 
                     if ($amarillas >= 4 && $amarillas % 4 == 0) {
@@ -223,14 +246,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $detalle_sanciones = [];
             
             if (function_exists('cumplirSancionesAutomaticas')) {
-                $resultado_sanciones = cumplirSancionesAutomaticas($partido_id, $db);
+                $resultado_sanciones = cumplirSancionesAutomaticas($partido_id, $db, $tipo_partido);
                 
                 if ($resultado_sanciones['success']) {
                     $sanciones_actualizadas = $resultado_sanciones['actualizados'];
                     $detalle_sanciones = $resultado_sanciones['detalle'] ?? [];
                     
                     if ($sanciones_actualizadas > 0) {
-                        $log_msg = "Sanciones cumplidas en partido $partido_id: ";
+                        $log_msg = "Sanciones cumplidas en partido $partido_id ($tipo_partido): ";
                         foreach ($detalle_sanciones as $det) {
                             $log_msg .= "{$det['nombre']} ({$det['equipo']}): {$det['cumplidos']}/{$det['total']} fechas";
                             if ($det['finalizada']) {
@@ -273,37 +296,149 @@ $campeonatos = $stmt->fetchAll();
 
 $campeonato_id = $_GET['campeonato'] ?? null;
 $categoria_id = $_GET['categoria'] ?? null;
-$fecha_id = $_GET['fecha'] ?? null;
+$fecha_filtro = $_GET['fecha'] ?? null;
+$zona_id = $_GET['zona'] ?? null;
 
 $categorias = [];
+$tiene_zonas = false;
+$zonas = [];
+$fechas_categoria = [];
+
 if ($campeonato_id) {
     $stmt = $db->prepare("SELECT id, nombre FROM categorias WHERE campeonato_id = ? AND activa = 1");
     $stmt->execute([$campeonato_id]);
     $categorias = $stmt->fetchAll();
+    
+    // Verificar si tiene formato de zonas
+    $stmt = $db->prepare("SELECT id FROM campeonatos_formato WHERE campeonato_id = ? LIMIT 1");
+    $stmt->execute([$campeonato_id]);
+    if ($stmt->fetch()) {
+        $tiene_zonas = true;
+        
+        // Cargar zonas
+        $stmt = $db->prepare("
+            SELECT z.* 
+            FROM zonas z
+            JOIN campeonatos_formato cf ON z.formato_id = cf.id
+            WHERE cf.campeonato_id = ?
+            ORDER BY z.orden
+        ");
+        $stmt->execute([$campeonato_id]);
+        $zonas = $stmt->fetchAll();
+    }
 }
 
-$fechas_categoria = [];
+// Cargar fechas para el selector
 if ($categoria_id) {
-    $stmt = $db->prepare("SELECT id, numero_fecha, fecha_programada FROM fechas WHERE categoria_id = ? ORDER BY numero_fecha");
+    // Obtener fechas de la tabla fechas (normal)
+    $stmt = $db->prepare("SELECT DISTINCT numero_fecha, fecha_programada FROM fechas WHERE categoria_id = ? ORDER BY numero_fecha");
     $stmt->execute([$categoria_id]);
-    $fechas_categoria = $stmt->fetchAll();
+    $fechas_normales = $stmt->fetchAll();
+    
+    // Obtener fechas de partidos_zona
+    if ($tiene_zonas) {
+        $stmt = $db->prepare("
+            SELECT DISTINCT pz.fecha_numero, pz.fecha_partido
+            FROM partidos_zona pz
+            JOIN zonas z ON pz.zona_id = z.id
+            JOIN campeonatos_formato cf ON z.formato_id = cf.id
+            JOIN equipos e ON pz.equipo_local_id = e.id
+            JOIN categorias cat ON e.categoria_id = cat.id
+            WHERE cat.id = ?
+            ORDER BY pz.fecha_numero
+        ");
+        $stmt->execute([$categoria_id]);
+        $fechas_zonas = $stmt->fetchAll();
+        
+        // Combinar y eliminar duplicados
+        $fechas_map = [];
+        foreach ($fechas_normales as $f) {
+            $fechas_map[$f['numero_fecha']] = $f['fecha_programada'];
+        }
+        foreach ($fechas_zonas as $f) {
+            if (!isset($fechas_map[$f['fecha_numero']])) {
+                $fechas_map[$f['fecha_numero']] = $f['fecha_partido'];
+            }
+        }
+        
+        ksort($fechas_map);
+        $fechas_categoria = [];
+        foreach ($fechas_map as $num => $fecha) {
+            $fechas_categoria[] = ['numero_fecha' => $num, 'fecha_programada' => $fecha];
+        }
+    } else {
+        $fechas_categoria = $fechas_normales;
+    }
 }
 
 $partidos = [];
-if ($fecha_id) {
-    $stmt = $db->prepare("
-        SELECT p.*, el.nombre as equipo_local, ev.nombre as equipo_visitante,
-               can.nombre as cancha, el.color_camiseta as color_local, ev.color_camiseta as color_visitante,
-               el.id as equipo_local_id, ev.id as equipo_visitante_id
-        FROM partidos p
-        JOIN equipos el ON p.equipo_local_id = el.id
-        JOIN equipos ev ON p.equipo_visitante_id = ev.id
-        LEFT JOIN canchas can ON p.cancha_id = can.id
-        WHERE p.fecha_id = ?
-        ORDER BY p.hora_partido ASC
-    ");
-    $stmt->execute([$fecha_id]);
-    $partidos = $stmt->fetchAll();
+if ($fecha_filtro) {
+    try {
+        if ($tiene_zonas && $zona_id) {
+            // Partidos de una zona específica
+            $stmt = $db->prepare("
+                SELECT pz.id, pz.equipo_local_id, pz.equipo_visitante_id, 
+                       COALESCE(pz.goles_local, 0) as goles_local, 
+                       COALESCE(pz.goles_visitante, 0) as goles_visitante,
+                       pz.estado, 
+                       COALESCE(pz.observaciones, '') as observaciones, 
+                       pz.hora_partido, pz.cancha_id, pz.zona_id,
+                       el.nombre as equipo_local, ev.nombre as equipo_visitante,
+                       el.color_camiseta as color_local, ev.color_camiseta as color_visitante,
+                       can.nombre as cancha, 'zona' as tipo_partido
+                FROM partidos_zona pz
+                JOIN equipos el ON pz.equipo_local_id = el.id
+                JOIN equipos ev ON pz.equipo_visitante_id = ev.id
+                LEFT JOIN canchas can ON pz.cancha_id = can.id
+                WHERE pz.zona_id = ? AND pz.fecha_numero = ?
+                ORDER BY pz.hora_partido ASC
+            ");
+            $stmt->execute([$zona_id, $fecha_filtro]);
+            $partidos = $stmt->fetchAll();
+        } elseif ($tiene_zonas) {
+            // Todos los partidos de zonas para esa fecha
+            $stmt = $db->prepare("
+                SELECT pz.id, pz.equipo_local_id, pz.equipo_visitante_id, 
+                       COALESCE(pz.goles_local, 0) as goles_local, 
+                       COALESCE(pz.goles_visitante, 0) as goles_visitante,
+                       pz.estado, 
+                       COALESCE(pz.observaciones, '') as observaciones, 
+                       pz.hora_partido, pz.cancha_id, pz.zona_id,
+                       el.nombre as equipo_local, ev.nombre as equipo_visitante,
+                       el.color_camiseta as color_local, ev.color_camiseta as color_visitante,
+                       can.nombre as cancha, z.nombre as nombre_zona, 'zona' as tipo_partido
+                FROM partidos_zona pz
+                JOIN zonas z ON pz.zona_id = z.id
+                JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                JOIN equipos el ON pz.equipo_local_id = el.id
+                JOIN equipos ev ON pz.equipo_visitante_id = ev.id
+                LEFT JOIN canchas can ON pz.cancha_id = can.id
+                WHERE cf.campeonato_id = ? AND pz.fecha_numero = ?
+                ORDER BY z.orden, pz.hora_partido ASC
+            ");
+            $stmt->execute([$campeonato_id, $fecha_filtro]);
+            $partidos = $stmt->fetchAll();
+        } else {
+            // Partidos normales (sin zonas)
+            $stmt = $db->prepare("
+                SELECT p.*, el.nombre as equipo_local, ev.nombre as equipo_visitante,
+                       can.nombre as cancha, el.color_camiseta as color_local, ev.color_camiseta as color_visitante,
+                       el.id as equipo_local_id, ev.id as equipo_visitante_id, 'normal' as tipo_partido
+                FROM partidos p
+                JOIN equipos el ON p.equipo_local_id = el.id
+                JOIN equipos ev ON p.equipo_visitante_id = ev.id
+                LEFT JOIN canchas can ON p.cancha_id = can.id
+                WHERE p.fecha_id IN (SELECT id FROM fechas WHERE categoria_id = ? AND numero_fecha = ?)
+                ORDER BY p.hora_partido ASC
+            ");
+            $stmt->execute([$categoria_id, $fecha_filtro]);
+            $partidos = $stmt->fetchAll();
+        }
+    } catch (PDOException $e) {
+        error_log("Error al cargar partidos: " . $e->getMessage());
+        $error = "Error al cargar los partidos. Por favor, verifica que las tablas estén correctamente configuradas.";
+        $partidos = [];
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -406,6 +541,10 @@ if ($fecha_id) {
             padding: 15px;
             margin-top: 10px;
         }
+        .badge-zona {
+            font-size: 0.85rem;
+            padding: 4px 8px;
+        }
     </style>
 </head>
 <body>
@@ -482,18 +621,31 @@ if ($fecha_id) {
                         <input type="hidden" name="campeonato" value="<?= $campeonato_id ?>">
                     </div>
                     <?php endif; ?>
-                    <?php if($categoria_id): ?>
-                    <div class="col-md-3">
+                    <?php if($categoria_id && !empty($fechas_categoria)): ?>
+                    <div class="col-md-2">
                         <select name="fecha" class="form-select" onchange="this.form.submit()">
                             <option value="">Seleccionar Fecha</option>
                             <?php foreach($fechas_categoria as $f): ?>
-                                <option value="<?= $f['id'] ?>" <?= $fecha_id==$f['id']?'selected':'' ?>>
+                                <option value="<?= $f['numero_fecha'] ?>" <?= $fecha_filtro==$f['numero_fecha']?'selected':'' ?>>
                                     Fecha <?= $f['numero_fecha'] ?> (<?= date('d/m/Y', strtotime($f['fecha_programada'])) ?>)
                                 </option>
                             <?php endforeach; ?>
                         </select>
                         <input type="hidden" name="campeonato" value="<?= $campeonato_id ?>">
                         <input type="hidden" name="categoria" value="<?= $categoria_id ?>">
+                    </div>
+                    <?php endif; ?>
+                    <?php if($tiene_zonas && $fecha_filtro && !empty($zonas)): ?>
+                    <div class="col-md-2">
+                        <select name="zona" class="form-select" onchange="this.form.submit()">
+                            <option value="">Todas las Zonas</option>
+                            <?php foreach($zonas as $z): ?>
+                                <option value="<?= $z['id'] ?>" <?= $zona_id==$z['id']?'selected':'' ?>><?= htmlspecialchars($z['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <input type="hidden" name="campeonato" value="<?= $campeonato_id ?>">
+                        <input type="hidden" name="categoria" value="<?= $categoria_id ?>">
+                        <input type="hidden" name="fecha" value="<?= $fecha_filtro ?>">
                     </div>
                     <?php endif; ?>
                 </form>
@@ -503,16 +655,17 @@ if ($fecha_id) {
                     <?php foreach($partidos as $p): ?>
                     <?php 
                         $tiene_cancha_y_horario = !empty($p['cancha']) && !empty($p['hora_partido']);
+                        $tipo_partido = $p['tipo_partido'] ?? 'normal';
                         $eventos_partido = [];
                         if ($p['estado'] == 'finalizado') {
                             $stmt = $db->prepare("
                                 SELECT e.*, j.apellido_nombre, j.equipo_id
                                 FROM eventos_partido e
                                 JOIN jugadores j ON e.jugador_id = j.id
-                                WHERE e.partido_id = ?
+                                WHERE e.partido_id = ? AND e.tipo_partido = ?
                                 ORDER BY e.tipo_evento, e.created_at
                             ");
-                            $stmt->execute([$p['id']]);
+                            $stmt->execute([$p['id'], $tipo_partido]);
                             $eventos_partido = $stmt->fetchAll();
                         }
                         $clase_card = 'partido-programado';
@@ -523,6 +676,9 @@ if ($fecha_id) {
                     <div class="col-md-6">
                         <div class="card partido-card <?= $clase_card ?>">
                             <div class="card-header">
+                                <?php if(isset($p['nombre_zona'])): ?>
+                                    <span class="badge bg-info badge-zona"><?= htmlspecialchars($p['nombre_zona']) ?></span>
+                                <?php endif; ?>
                                 <?php if($p['estado'] == 'finalizado'): ?>
                                     <div class="resultado-final">
                                         <strong style="color:<?= $p['color_local'] ?>"><?= htmlspecialchars($p['equipo_local']) ?> <?= $p['goles_local'] ?></strong>
@@ -572,12 +728,12 @@ if ($fecha_id) {
                                             <small class="d-block text-muted mt-1">No se puede modificar</small>
                                         <?php elseif($p['estado'] == 'finalizado'): ?>
                                             <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#modalResultado" 
-                                                onclick="editarPartido(<?= $p['id'] ?>, <?= $p['equipo_local_id'] ?>, <?= $p['equipo_visitante_id'] ?>, '<?= addslashes($p['equipo_local']) ?>', '<?= addslashes($p['equipo_visitante']) ?>', <?= $p['goles_local'] ?>, <?= $p['goles_visitante'] ?>, '<?= addslashes($p['observaciones']) ?>')">
+                                                onclick="editarPartido(<?= $p['id'] ?>, <?= $p['equipo_local_id'] ?>, <?= $p['equipo_visitante_id'] ?>, '<?= addslashes($p['equipo_local']) ?>', '<?= addslashes($p['equipo_visitante']) ?>', <?= $p['goles_local'] ?>, <?= $p['goles_visitante'] ?>, '<?= addslashes($p['observaciones']) ?>', '<?= $tipo_partido ?>')">
                                                 <i class="fas fa-edit"></i> Editar Resultado
                                             </button>
                                         <?php else: ?>
                                             <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalResultado" 
-                                                onclick="cargarPartido(<?= $p['id'] ?>, <?= $p['equipo_local_id'] ?>, <?= $p['equipo_visitante_id'] ?>, '<?= addslashes($p['equipo_local']) ?>', '<?= addslashes($p['equipo_visitante']) ?>')">
+                                                onclick="cargarPartido(<?= $p['id'] ?>, <?= $p['equipo_local_id'] ?>, <?= $p['equipo_visitante_id'] ?>, '<?= addslashes($p['equipo_local']) ?>', '<?= addslashes($p['equipo_visitante']) ?>', '<?= $tipo_partido ?>')">
                                                 <i class="fas fa-plus"></i> Cargar Resultado
                                             </button>
                                         <?php endif; ?>
@@ -639,7 +795,7 @@ if ($fecha_id) {
                     </div>
                     <?php endforeach; ?>
                 </div>
-                <?php elseif($fecha_id): ?>
+                <?php elseif($fecha_filtro): ?>
                 <div class="text-center py-5">
                     <i class="fas fa-calendar-times fa-4x text-muted mb-3"></i>
                     <h4>No hay partidos para esta fecha</h4>
@@ -661,6 +817,7 @@ if ($fecha_id) {
                 <form method="POST" id="formResultado">
                     <input type="hidden" name="action" value="cargar_resultado" id="modal_action">
                     <input type="hidden" name="partido_id" id="partido_id">
+                    <input type="hidden" name="tipo_partido" id="tipo_partido">
                     <input type="hidden" id="equipo_local_id">
                     <input type="hidden" id="equipo_visitante_id">
                     <div class="modal-header bg-primary text-white">
@@ -819,35 +976,36 @@ if ($fecha_id) {
     <script>
         let jugadoresLocal = [];
         let jugadoresVisitante = [];
-        let numerosLocal = {}; // {jugador_id: numero}
+        let numerosLocal = {};
         let numerosVisitante = {};
 
-        function cargarPartido(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante) {
+        function cargarPartido(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante, tipoPartido) {
             resetModal();
             document.getElementById('modal_action').value = 'cargar_resultado';
             document.getElementById('modal_title').textContent = 'Cargar Resultado';
             document.getElementById('btnGuardar').innerHTML = '<i class="fas fa-save"></i> Guardar Resultado';
-            fillModalData(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante);
+            fillModalData(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante, tipoPartido);
             cargarJugadoresEquipo(equipoLocal, 'local');
             cargarJugadoresEquipo(equipoVisitante, 'visitante');
         }
         
-        function editarPartido(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante, golesLocal, golesVisitante, observaciones) {
+        function editarPartido(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante, golesLocal, golesVisitante, observaciones, tipoPartido) {
             resetModal();
             document.getElementById('modal_action').value = 'editar_resultado';
             document.getElementById('modal_title').textContent = 'Editar Resultado';
             document.getElementById('btnGuardar').innerHTML = '<i class="fas fa-edit"></i> Actualizar Resultado';
-            fillModalData(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante);
+            fillModalData(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante, tipoPartido);
             document.getElementById('goles_local').value = golesLocal;
             document.getElementById('goles_visitante').value = golesVisitante;
             document.getElementById('observaciones').value = observaciones;
             cargarJugadoresEquipo(equipoLocal, 'local');
             cargarJugadoresEquipo(equipoVisitante, 'visitante');
-            loadExistingEvents(id);
+            loadExistingEvents(id, tipoPartido);
         }
         
-        function fillModalData(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante) {
+        function fillModalData(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante, tipoPartido) {
             document.getElementById('partido_id').value = id;
+            document.getElementById('tipo_partido').value = tipoPartido;
             document.getElementById('equipo_local_id').value = equipoLocal;
             document.getElementById('equipo_visitante_id').value = equipoVisitante;
             document.getElementById('nombre_local_jugadores').textContent = nombreLocal;
@@ -1066,9 +1224,9 @@ if ($fecha_id) {
             document.getElementById('goles_' + lado).value = goles;
         }
         
-        async function loadExistingEvents(partidoId) {
+        async function loadExistingEvents(partidoId, tipoPartido) {
             try {
-                const response = await fetch('get_eventos.php?partido_id=' + partidoId);
+                const response = await fetch('get_eventos.php?partido_id=' + partidoId + '&tipo_partido=' + tipoPartido);
                 if (!response.ok) throw new Error('Error al cargar eventos');
                 const data = await response.json();
                 
