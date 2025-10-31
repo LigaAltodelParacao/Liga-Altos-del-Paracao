@@ -10,13 +10,13 @@ $db = Database::getInstance()->getConnection();
 $message = '';
 $error = '';
 
-// Obtener campeonatos y categorías
+// Obtener campeonatos
 $campeonatos = $db->query("SELECT * FROM campeonatos WHERE activo=1 ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
 
 // AJAX: Obtener categorías por campeonato
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'categorias' && isset($_GET['campeonato_id'])) {
     header('Content-Type: application/json');
-    $stmt = $db->prepare("SELECT * FROM categorias WHERE campeonato_id = ? AND activa = 1 ORDER BY nombre");
+    $stmt = $db->prepare("SELECT * FROM categorias WHERE campeonato_id = ? AND activa = 1 ORDER BY nivel, nombre");
     $stmt->execute([$_GET['campeonato_id']]);
     echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
     exit;
@@ -70,18 +70,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
         // Crear formato
         $stmt = $db->prepare("
             INSERT INTO campeonatos_formato 
-            (campeonato_id, tipo_formato, cantidad_zonas, 
-             primeros_clasifican, segundos_clasifican, terceros_clasifican, cuartos_clasifican,
+            (campeonato_id, tipo_formato, cantidad_zonas, equipos_clasifican,
              tiene_octavos, tiene_cuartos, tiene_semifinal, tiene_tercer_puesto, activo)
-            VALUES (?, 'mixto', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            VALUES (?, 'mixto', ?, ?, ?, ?, ?, ?, 1)
         ");
+        
+        $total_clasifican = $primeros_clasifican + $segundos_clasifican + $terceros_clasifican + $cuartos_clasifican;
+        
         $stmt->execute([
             $campeonato_id,
             $cantidad_zonas,
-            $primeros_clasifican,
-            $segundos_clasifican,
-            $terceros_clasifican,
-            $cuartos_clasifican,
+            $total_clasifican,
             isset($_POST['tiene_octavos']) ? 1 : 0,
             isset($_POST['tiene_cuartos']) ? 1 : 0,
             isset($_POST['tiene_semifinal']) ? 1 : 0,
@@ -95,8 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
         $zonas_ids = [];
         
         for ($i = 0; $i < $cantidad_zonas; $i++) {
-            $stmt = $db->prepare("INSERT INTO zonas (formato_id, nombre, orden, capacidad) VALUES (?, ?, ?, ?)");
-            $stmt->execute([$formato_id, "Zona {$letras_zonas[$i]}", $i + 1, $distribucion[$i]]);
+            $stmt = $db->prepare("INSERT INTO zonas (formato_id, nombre, orden) VALUES (?, ?, ?)");
+            $stmt->execute([$formato_id, "Zona {$letras_zonas[$i]}", $i + 1]);
             $zonas_ids[] = $db->lastInsertId();
         }
         
@@ -155,8 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
         
         $db->commit();
         
-        header("Location: torneos_zonas.php?msg=created");
-        exit;
+        $message = 'Torneo creado exitosamente con ' . $cantidad_zonas . ' zonas y ' . $cantidad_equipos . ' equipos';
         
     } catch (Exception $e) {
         $db->rollBack();
@@ -280,14 +278,21 @@ function generarFixtureZona($zona_id, $db) {
             <div class="col-md-9 col-lg-10 p-4">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h2><i class="fas fa-plus-circle"></i> Crear Torneo con Zonas</h2>
-                    <a href="torneos_zonas.php" class="btn btn-secondary">
+                    <a href="dashboard.php" class="btn btn-secondary">
                         <i class="fas fa-arrow-left"></i> Volver
                     </a>
                 </div>
 
+                <?php if ($message): ?>
+                    <div class="alert alert-success alert-dismissible fade show">
+                        <i class="fas fa-check-circle"></i> <?= htmlspecialchars($message) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
                 <?php if ($error): ?>
                     <div class="alert alert-danger alert-dismissible fade show">
-                        <?= htmlspecialchars($error) ?>
+                        <i class="fas fa-exclamation-triangle"></i> <?= htmlspecialchars($error) ?>
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 <?php endif; ?>
@@ -438,7 +443,7 @@ function generarFixtureZona($zona_id, $db) {
                             </div>
                             <div class="alert alert-warning mt-3">
                                 <i class="fas fa-exclamation-triangle"></i> <strong>Importante:</strong> Los partidos de fase eliminatoria se generarán automáticamente 
-                                cuando TODOS los partidos de la fase clasificatoria estén completados, usando un sistema de bracket con siembra.
+                                cuando TODOS los partidos de la fase clasificatoria estén completados.
                             </div>
                         </div>
                     </div>
@@ -469,7 +474,7 @@ function generarFixtureZona($zona_id, $db) {
                     <!-- Botones -->
                     <div class="card">
                         <div class="card-body text-end">
-                            <a href="torneos_zonas.php" class="btn btn-secondary btn-lg">
+                            <a href="dashboard.php" class="btn btn-secondary btn-lg">
                                 <i class="fas fa-times"></i> Cancelar
                             </a>
                             <button type="submit" name="crear_torneo" class="btn btn-success btn-lg">
@@ -486,65 +491,13 @@ function generarFixtureZona($zona_id, $db) {
     <script>
         // Cargar categorías al seleccionar campeonato
         document.getElementById('campeonato_id').addEventListener('change', function() {
-            const total = zonas + segundos + terceros + cuartos;
-            
-            let resumen = `<strong>${total} equipos clasificarán:</strong><br>`;
-            resumen += `- ${zonas} primeros de zona (automático)<br>`;
-            if (segundos > 0) resumen += `- ${segundos} segundos lugares<br>`;
-            if (terceros > 0) resumen += `- ${terceros} terceros lugares<br>`;
-            if (cuartos > 0) resumen += `- ${cuartos} cuartos lugares<br>`;
-            
-            document.getElementById('resumen_clasificacion').innerHTML = resumen;
-        }
-
-        // Seleccionar todos los equipos
-        function seleccionarTodos() {
-            document.querySelectorAll('.equipo-checkbox').forEach(cb => cb.checked = true);
-            actualizarPreview();
-        }
-
-        // Deseleccionar todos
-        function deseleccionarTodos() {
-            document.querySelectorAll('.equipo-checkbox').forEach(cb => cb.checked = false);
-            actualizarPreview();
-        }
-
-        // Event listeners para actualizar preview
-        document.getElementById('cantidad_zonas').addEventListener('change', actualizarPreview);
-        document.getElementById('segundos_clasifican').addEventListener('input', actualizarTotalClasificados);
-        document.getElementById('terceros_clasifican').addEventListener('input', actualizarTotalClasificados);
-        document.getElementById('cuartos_clasifican').addEventListener('input', actualizarTotalClasificados);
-
-        // Validación del formulario
-        document.getElementById('form_crear_torneo').addEventListener('submit', function(e) {
-            const equiposSeleccionados = document.querySelectorAll('.equipo-checkbox:checked').length;
-            const zonas = parseInt(document.getElementById('cantidad_zonas').value);
-            
-            if (equiposSeleccionados < 4) {
-                e.preventDefault();
-                alert('Debe seleccionar al menos 4 equipos para crear el torneo');
-                return false;
-            }
-            
-            if (zonas > equiposSeleccionados) {
-                e.preventDefault();
-                alert('No puede haber más zonas que equipos seleccionados');
-                return false;
-            }
-            
-            return true;
-        });
-
-        // Inicializar
-        actualizarTotalClasificados();
-    </script>
-</body>
-</html> campeonatoId = this.value;
+            const campeonatoId = this.value;
             const categoriaSelect = document.getElementById('categoria_id');
             
             if (!campeonatoId) {
                 categoriaSelect.disabled = true;
                 categoriaSelect.innerHTML = '<option value="">Seleccione un campeonato primero</option>';
+                document.getElementById('equipos_container').innerHTML = '<div class="col-12 text-center text-muted py-4"><i class="fas fa-info-circle fa-2x mb-2"></i><p>Selecciona una categoría</p></div>';
                 return;
             }
             
@@ -553,9 +506,13 @@ function generarFixtureZona($zona_id, $db) {
                 .then(data => {
                     categoriaSelect.innerHTML = '<option value="">Seleccionar...</option>';
                     data.forEach(cat => {
-                        categoriaSelect.innerHTML += `<option value="${cat.id}">${cat.nombre}</option>`;
+                        categoriaSelect.innerHTML += `<option value="${cat.id}">${cat.nombre} (Nivel ${cat.nivel})</option>`;
                     });
                     categoriaSelect.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error al cargar categorías:', error);
+                    alert('Error al cargar las categorías');
                 });
         });
 
@@ -569,17 +526,19 @@ function generarFixtureZona($zona_id, $db) {
                 return;
             }
             
+            container.innerHTML = '<div class="col-12 text-center"><div class="spinner-border text-primary" role="status"></div></div>';
+            
             fetch(`?ajax=equipos&categoria_id=${categoriaId}`)
                 .then(r => r.json())
                 .then(equipos => {
                     if (equipos.length === 0) {
-                        container.innerHTML = '<div class="col-12 text-center text-muted py-4">No hay equipos en esta categoría</div>';
+                        container.innerHTML = '<div class="col-12 text-center text-muted py-4"><i class="fas fa-exclamation-triangle fa-2x mb-2"></i><p>No hay equipos en esta categoría</p></div>';
                         return;
                     }
                     
                     container.innerHTML = '';
                     equipos.forEach(eq => {
-                        const logo = eq.logo ? `<img src="../uploads/${eq.logo}" width="20" class="me-2">` : '';
+                        const logo = eq.logo ? `<img src="../uploads/${eq.logo}" width="20" class="me-2" style="object-fit: contain;">` : '';
                         container.innerHTML += `
                             <div class="col-md-4 col-lg-3 mb-2">
                                 <div class="form-check">
@@ -593,6 +552,10 @@ function generarFixtureZona($zona_id, $db) {
                             </div>
                         `;
                     });
+                })
+                .catch(error => {
+                    console.error('Error al cargar equipos:', error);
+                    container.innerHTML = '<div class="col-12 text-center text-danger py-4">Error al cargar equipos</div>';
                 });
         });
 
@@ -647,4 +610,57 @@ function generarFixtureZona($zona_id, $db) {
             const terceros = parseInt(document.getElementById('terceros_clasifican').value) || 0;
             const cuartos = parseInt(document.getElementById('cuartos_clasifican').value) || 0;
             
-            const
+            const total = zonas + segundos + terceros + cuartos;
+            
+            let resumen = `<strong>${total} equipos clasificarán:</strong><br>`;
+            resumen += `- ${zonas} primeros de zona (automático)<br>`;
+            if (segundos > 0) resumen += `- ${segundos} segundos lugares<br>`;
+            if (terceros > 0) resumen += `- ${terceros} terceros lugares<br>`;
+            if (cuartos > 0) resumen += `- ${cuartos} cuartos lugares`;
+            
+            document.getElementById('resumen_clasificacion').innerHTML = resumen;
+        }
+
+        // Seleccionar todos los equipos
+        function seleccionarTodos() {
+            document.querySelectorAll('.equipo-checkbox').forEach(cb => cb.checked = true);
+            actualizarPreview();
+        }
+
+        // Deseleccionar todos
+        function deseleccionarTodos() {
+            document.querySelectorAll('.equipo-checkbox').forEach(cb => cb.checked = false);
+            actualizarPreview();
+        }
+
+        // Event listeners para actualizar preview
+        document.getElementById('cantidad_zonas').addEventListener('change', actualizarPreview);
+        document.getElementById('segundos_clasifican').addEventListener('input', actualizarTotalClasificados);
+        document.getElementById('terceros_clasifican').addEventListener('input', actualizarTotalClasificados);
+        document.getElementById('cuartos_clasifican').addEventListener('input', actualizarTotalClasificados);
+
+        // Validación del formulario
+        document.getElementById('form_crear_torneo').addEventListener('submit', function(e) {
+            const equiposSeleccionados = document.querySelectorAll('.equipo-checkbox:checked').length;
+            const zonas = parseInt(document.getElementById('cantidad_zonas').value);
+            
+            if (equiposSeleccionados < 4) {
+                e.preventDefault();
+                alert('Debe seleccionar al menos 4 equipos para crear el torneo');
+                return false;
+            }
+            
+            if (zonas > equiposSeleccionados) {
+                e.preventDefault();
+                alert('No puede haber más zonas que equipos seleccionados');
+                return false;
+            }
+            
+            return true;
+        });
+
+        // Inicializar
+        actualizarTotalClasificados();
+    </script>
+</body>
+</html>
