@@ -18,16 +18,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $campeonato_id = $_POST['campeonato_id'];
             $nombre = trim($_POST['nombre']);
             $descripcion = trim($_POST['descripcion']);
+            $nivel = $_POST['nivel'] ?? 1;
             
             if (empty($campeonato_id) || empty($nombre)) {
                 $error = 'El campeonato y nombre son obligatorios';
             } else {
                 try {
                     $stmt = $db->prepare("
-                        INSERT INTO categorias (campeonato_id, nombre, descripcion) 
-                        VALUES (?, ?, ?)
+                        INSERT INTO categorias (campeonato_id, nombre, descripcion, nivel) 
+                        VALUES (?, ?, ?, ?)
                     ");
-                    $stmt->execute([$campeonato_id, $nombre, $descripcion]);
+                    $stmt->execute([$campeonato_id, $nombre, $descripcion, $nivel]);
                     $message = 'Categoría creada exitosamente';
                 } catch (Exception $e) {
                     $error = 'Error al crear categoría: ' . $e->getMessage();
@@ -40,18 +41,51 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $campeonato_id = $_POST['campeonato_id'];
             $nombre = trim($_POST['nombre']);
             $descripcion = trim($_POST['descripcion']);
+            $nivel = $_POST['nivel'] ?? 1;
             $activa = isset($_POST['activa']) ? 1 : 0;
             
             try {
                 $stmt = $db->prepare("
                     UPDATE categorias 
-                    SET campeonato_id = ?, nombre = ?, descripcion = ?, activa = ?
+                    SET campeonato_id = ?, nombre = ?, descripcion = ?, nivel = ?, activa = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$campeonato_id, $nombre, $descripcion, $activa, $id]);
+                $stmt->execute([$campeonato_id, $nombre, $descripcion, $nivel, $activa, $id]);
                 $message = 'Categoría actualizada exitosamente';
             } catch (Exception $e) {
                 $error = 'Error al actualizar categoría: ' . $e->getMessage();
+            }
+            break;
+            
+        case 'cambiar_nivel':
+            $id = $_POST['id'];
+            $accion = $_POST['cambio']; // 'ascender' o 'descender'
+            
+            try {
+                // Obtener nivel actual
+                $stmt = $db->prepare("SELECT nivel FROM categorias WHERE id = ?");
+                $stmt->execute([$id]);
+                $categoria = $stmt->fetch();
+                
+                if ($categoria) {
+                    $nuevo_nivel = $categoria['nivel'];
+                    
+                    if ($accion == 'ascender' && $nuevo_nivel > 1) {
+                        $nuevo_nivel--;
+                        $mensaje_tipo = 'ascendida';
+                    } elseif ($accion == 'descender') {
+                        $nuevo_nivel++;
+                        $mensaje_tipo = 'descendida';
+                    } else {
+                        throw new Exception('No se puede ascender más. Ya está en el nivel máximo (1).');
+                    }
+                    
+                    $stmt = $db->prepare("UPDATE categorias SET nivel = ? WHERE id = ?");
+                    $stmt->execute([$nuevo_nivel, $id]);
+                    $message = "Categoría {$mensaje_tipo} al nivel {$nuevo_nivel}";
+                }
+            } catch (Exception $e) {
+                $error = 'Error al cambiar nivel: ' . $e->getMessage();
             }
             break;
             
@@ -80,7 +114,7 @@ $stmt = $db->query("
     JOIN campeonatos camp ON c.campeonato_id = camp.id
     LEFT JOIN equipos e ON c.id = e.categoria_id
     GROUP BY c.id
-    ORDER BY camp.nombre, c.nombre
+    ORDER BY camp.nombre, c.nivel, c.nombre
 ");
 $categorias = $stmt->fetchAll();
 ?>
@@ -94,6 +128,18 @@ $categorias = $stmt->fetchAll();
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="../assets/css/style.css" rel="stylesheet">
+    <style>
+        .nivel-badge {
+            font-size: 0.9rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+        }
+        .nivel-1 { background-color: #ffd700; color: #000; font-weight: bold; }
+        .nivel-2 { background-color: #c0c0c0; color: #000; }
+        .nivel-3 { background-color: #cd7f32; color: #fff; }
+        .nivel-4 { background-color: #6c757d; color: #fff; }
+        .nivel-5 { background-color: #343a40; color: #fff; }
+    </style>
 </head>
 <body>
     <!-- Header -->
@@ -138,6 +184,12 @@ $categorias = $stmt->fetchAll();
                     </div>
                 <?php endif; ?>
 
+                <!-- Información sobre niveles -->
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> <strong>Sistema de Niveles:</strong> 
+                    Nivel 1 es la categoría más alta, Nivel 2 la segunda, etc. Usa los botones de ascenso/descenso para mover equipos entre niveles.
+                </div>
+
                 <!-- Lista de Categorías -->
                 <div class="card">
                     <div class="card-body">
@@ -152,6 +204,7 @@ $categorias = $stmt->fetchAll();
                                     <thead>
                                         <tr>
                                             <th>Campeonato</th>
+                                            <th>Nivel</th>
                                             <th>Nombre</th>
                                             <th>Descripción</th>
                                             <th>Equipos</th>
@@ -163,6 +216,11 @@ $categorias = $stmt->fetchAll();
                                         <?php foreach ($categorias as $categoria): ?>
                                         <tr>
                                             <td><?php echo htmlspecialchars($categoria['campeonato_nombre']); ?></td>
+                                            <td>
+                                                <span class="nivel-badge nivel-<?php echo $categoria['nivel']; ?>">
+                                                    Nivel <?php echo $categoria['nivel']; ?>
+                                                </span>
+                                            </td>
                                             <td><strong><?php echo htmlspecialchars($categoria['nombre']); ?></strong></td>
                                             <td><?php echo htmlspecialchars($categoria['descripcion']); ?></td>
                                             <td>
@@ -177,14 +235,34 @@ $categorias = $stmt->fetchAll();
                                             </td>
                                             <td>
                                                 <div class="btn-group" role="group">
+                                                    <!-- Botón Ascender -->
+                                                    <button class="btn btn-sm btn-outline-success" 
+                                                            onclick="cambiarNivel(<?php echo $categoria['id']; ?>, 'ascender')"
+                                                            <?php echo $categoria['nivel'] == 1 ? 'disabled' : ''; ?>
+                                                            title="Ascender a nivel superior">
+                                                        <i class="fas fa-arrow-up"></i>
+                                                    </button>
+                                                    
+                                                    <!-- Botón Descender -->
+                                                    <button class="btn btn-sm btn-outline-warning" 
+                                                            onclick="cambiarNivel(<?php echo $categoria['id']; ?>, 'descender')"
+                                                            title="Descender a nivel inferior">
+                                                        <i class="fas fa-arrow-down"></i>
+                                                    </button>
+                                                    
+                                                    <!-- Botón Editar -->
                                                     <button class="btn btn-sm btn-outline-primary" 
                                                             onclick="editarCategoria(<?php echo $categoria['id']; ?>)">
                                                         <i class="fas fa-edit"></i>
                                                     </button>
+                                                    
+                                                    <!-- Botón Ver Equipos -->
                                                     <a href="equipos.php?categoria=<?php echo $categoria['id']; ?>" 
                                                        class="btn btn-sm btn-outline-info">
                                                         <i class="fas fa-users"></i>
                                                     </a>
+                                                    
+                                                    <!-- Botón Eliminar -->
                                                     <button class="btn btn-sm btn-outline-danger" 
                                                             onclick="eliminarCategoria(<?php echo $categoria['id']; ?>, '<?php echo htmlspecialchars($categoria['nombre']); ?>')">
                                                         <i class="fas fa-trash"></i>
@@ -237,6 +315,20 @@ $categorias = $stmt->fetchAll();
                         </div>
                         
                         <div class="mb-3">
+                            <label for="nivel" class="form-label">Nivel de la Categoría *</label>
+                            <select class="form-select" id="nivel" name="nivel" required>
+                                <option value="1">Nivel 1 (Primera/Máxima)</option>
+                                <option value="2">Nivel 2 (Segunda)</option>
+                                <option value="3">Nivel 3 (Tercera)</option>
+                                <option value="4">Nivel 4 (Cuarta)</option>
+                                <option value="5">Nivel 5 (Quinta)</option>
+                            </select>
+                            <div class="form-text">
+                                <i class="fas fa-info-circle"></i> Nivel 1 es la categoría más alta. Los equipos pueden ascender/descender entre niveles.
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
                             <label for="descripcion" class="form-label">Descripción</label>
                             <textarea class="form-control" id="descripcion" name="descripcion" rows="3"
                                       placeholder="Descripción opcional de la categoría"></textarea>
@@ -269,6 +361,13 @@ $categorias = $stmt->fetchAll();
         <input type="hidden" name="id" id="eliminarId">
     </form>
 
+    <!-- Form para cambiar nivel -->
+    <form method="POST" id="formCambiarNivel" style="display: none;">
+        <input type="hidden" name="action" value="cambiar_nivel">
+        <input type="hidden" name="id" id="cambiarNivelId">
+        <input type="hidden" name="cambio" id="cambiarNivelAccion">
+    </form>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
     <script>
         function editarCategoria(id) {
@@ -280,6 +379,7 @@ $categorias = $stmt->fetchAll();
                 document.getElementById('categoriaId').value = <?php echo $categoria['id']; ?>;
                 document.getElementById('campeonato_id').value = <?php echo $categoria['campeonato_id']; ?>;
                 document.getElementById('nombre').value = '<?php echo htmlspecialchars($categoria['nombre'], ENT_QUOTES); ?>';
+                document.getElementById('nivel').value = '<?php echo $categoria['nivel']; ?>';
                 document.getElementById('descripcion').value = '<?php echo htmlspecialchars($categoria['descripcion'], ENT_QUOTES); ?>';
                 document.getElementById('activa').checked = <?php echo $categoria['activa'] ? 'true' : 'false'; ?>;
                 document.getElementById('activaContainer').style.display = 'block';
@@ -289,6 +389,15 @@ $categorias = $stmt->fetchAll();
                 return;
             }
             <?php endforeach; ?>
+        }
+
+        function cambiarNivel(id, accion) {
+            const textoAccion = accion === 'ascender' ? 'ascender esta categoría' : 'descender esta categoría';
+            if (confirm('¿Confirmar ' + textoAccion + '?')) {
+                document.getElementById('cambiarNivelId').value = id;
+                document.getElementById('cambiarNivelAccion').value = accion;
+                document.getElementById('formCambiarNivel').submit();
+            }
         }
 
         function eliminarCategoria(id, nombre) {
@@ -304,6 +413,7 @@ $categorias = $stmt->fetchAll();
             document.getElementById('modalTitle').innerHTML = '<i class="fas fa-list"></i> Nueva Categoría';
             document.getElementById('formAction').value = 'create';
             document.getElementById('categoriaId').value = '';
+            document.getElementById('nivel').value = '1';
             document.getElementById('activaContainer').style.display = 'none';
         });
     </script>
