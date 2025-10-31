@@ -5,7 +5,7 @@ $db = Database::getInstance()->getConnection();
 
 // Obtener categorías activas
 $stmt = $db->query("
-    SELECT c.*, camp.nombre as campeonato_nombre
+    SELECT c.*, camp.nombre as campeonato_nombre, camp.id as campeonato_id
     FROM categorias c
     JOIN campeonatos camp ON c.campeonato_id = camp.id
     WHERE c.activa = 1 AND camp.activo = 1
@@ -16,30 +16,120 @@ $categorias = $stmt->fetchAll();
 // Categoría seleccionada
 $categoria_id = $_GET['categoria'] ?? ($categorias[0]['id'] ?? null);
 
-// *** NUEVA LÓGICA: Detectar si es torneo con zonas ***
-$es_torneo_zonas = false;
-$formato_zonas = null;
+// Verificar si tiene formato de zonas
+$tiene_zonas = false;
 $zonas = [];
+$campeonato_id = null;
+$tabla_posiciones = [];
+$tablas_por_zona = [];
 
 if ($categoria_id) {
-    // Buscar si existe un formato de zonas para esta categoría
-    $stmt = $db->prepare("
-        SELECT cf.* 
-        FROM campeonatos_formato cf
-        JOIN categorias cat ON cf.campeonato_id = cat.campeonato_id
-        WHERE cat.id = ? AND cf.activo = 1
-        LIMIT 1
-    ");
-    $stmt->execute([$categoria_id]);
-    $formato_zonas = $stmt->fetch(PDO::FETCH_ASSOC);
+    // Obtener campeonato_id
+    foreach ($categorias as $cat) {
+        if ($cat['id'] == $categoria_id) {
+            $campeonato_id = $cat['campeonato_id'];
+            break;
+        }
+    }
     
-    if ($formato_zonas) {
-        $es_torneo_zonas = true;
-        
-        // Obtener zonas
-        $stmt = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
-        $stmt->execute([$formato_zonas['id']]);
-        $zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Verificar si tiene formato de zonas
+    if ($campeonato_id) {
+        $stmt = $db->prepare("SELECT id FROM campeonatos_formato WHERE campeonato_id = ? LIMIT 1");
+        $stmt->execute([$campeonato_id]);
+        if ($stmt->fetch()) {
+            $tiene_zonas = true;
+            
+            // Cargar zonas
+            $stmt = $db->prepare("
+                SELECT z.* 
+                FROM zonas z
+                JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                WHERE cf.campeonato_id = ?
+                ORDER BY z.orden
+            ");
+            $stmt->execute([$campeonato_id]);
+            $zonas = $stmt->fetchAll();
+            
+            // Obtener tabla de posiciones por zona
+            foreach ($zonas as $zona) {
+                $stmt = $db->prepare("
+                    SELECT 
+                        e.id as equipo_id,
+                        e.nombre as equipo,
+                        e.logo,
+                        ez.puntos,
+                        ez.partidos_jugados,
+                        ez.partidos_ganados as ganados,
+                        ez.partidos_empatados as empatados,
+                        ez.partidos_perdidos as perdidos,
+                        ez.goles_favor,
+                        ez.goles_contra,
+                        ez.diferencia_gol as diferencia_goles,
+                        ez.posicion,
+                        ez.clasificado
+                    FROM equipos_zonas ez
+                    JOIN equipos e ON ez.equipo_id = e.id
+                    WHERE ez.zona_id = ?
+                    ORDER BY ez.posicion ASC, ez.puntos DESC, ez.diferencia_gol DESC, ez.goles_favor DESC
+                ");
+                $stmt->execute([$zona['id']]);
+                $tablas_por_zona[$zona['id']] = [
+                    'zona' => $zona,
+                    'equipos' => $stmt->fetchAll()
+                ];
+            }
+        }
+    }
+    
+    // Si NO tiene zonas, obtener tabla normal
+    if (!$tiene_zonas) {
+        $stmt = $db->prepare("
+            SELECT 
+                e.id as equipo_id,
+                e.nombre as equipo,
+                e.logo,
+                COUNT(p.id) as partidos_jugados,
+                SUM(CASE 
+                    WHEN (p.equipo_local_id = e.id AND p.goles_local > p.goles_visitante) OR 
+                         (p.equipo_visitante_id = e.id AND p.goles_visitante > p.goles_local) 
+                    THEN 1 ELSE 0 END) as ganados,
+                SUM(CASE 
+                    WHEN p.goles_local = p.goles_visitante AND p.estado = 'finalizado'
+                    THEN 1 ELSE 0 END) as empatados,
+                SUM(CASE 
+                    WHEN (p.equipo_local_id = e.id AND p.goles_local < p.goles_visitante) OR 
+                         (p.equipo_visitante_id = e.id AND p.goles_visitante < p.goles_local) 
+                    THEN 1 ELSE 0 END) as perdidos,
+                SUM(CASE 
+                    WHEN p.equipo_local_id = e.id THEN p.goles_local 
+                    WHEN p.equipo_visitante_id = e.id THEN p.goles_visitante 
+                    ELSE 0 END) as goles_favor,
+                SUM(CASE 
+                    WHEN p.equipo_local_id = e.id THEN p.goles_visitante 
+                    WHEN p.equipo_visitante_id = e.id THEN p.goles_local 
+                    ELSE 0 END) as goles_contra,
+                (SUM(CASE 
+                    WHEN p.equipo_local_id = e.id THEN p.goles_local 
+                    WHEN p.equipo_visitante_id = e.id THEN p.goles_visitante 
+                    ELSE 0 END) - SUM(CASE 
+                    WHEN p.equipo_local_id = e.id THEN p.goles_visitante 
+                    WHEN p.equipo_visitante_id = e.id THEN p.goles_local 
+                    ELSE 0 END)) as diferencia_goles,
+                (SUM(CASE 
+                    WHEN (p.equipo_local_id = e.id AND p.goles_local > p.goles_visitante) OR 
+                         (p.equipo_visitante_id = e.id AND p.goles_visitante > p.goles_local) 
+                    THEN 3
+                    WHEN p.goles_local = p.goles_visitante AND p.estado = 'finalizado'
+                    THEN 1 ELSE 0 END)) as puntos
+            FROM equipos e
+            LEFT JOIN partidos p ON (p.equipo_local_id = e.id OR p.equipo_visitante_id = e.id) 
+                                  AND p.estado = 'finalizado'
+            WHERE e.categoria_id = ? AND e.activo = 1
+            GROUP BY e.id, e.nombre, e.logo
+            ORDER BY puntos DESC, diferencia_goles DESC, goles_favor DESC, e.nombre ASC
+        ");
+        $stmt->execute([$categoria_id]);
+        $tabla_posiciones = $stmt->fetchAll();
     }
 }
 
@@ -50,80 +140,6 @@ foreach ($categorias as $cat) {
         $categoria_actual = $cat;
         break;
     }
-}
-
-// *** SI ES TORNEO CON ZONAS ***
-$tablas_por_zona = [];
-if ($es_torneo_zonas && !empty($zonas)) {
-    foreach ($zonas as $zona) {
-        $stmt = $db->prepare("
-            SELECT 
-                ez.*,
-                e.nombre as equipo,
-                e.logo
-            FROM equipos_zonas ez
-            JOIN equipos e ON ez.equipo_id = e.id
-            WHERE ez.zona_id = ?
-            ORDER BY ez.puntos DESC, ez.diferencia_gol DESC, ez.goles_favor DESC, e.nombre ASC
-        ");
-        $stmt->execute([$zona['id']]);
-        $tablas_por_zona[$zona['id']] = [
-            'zona' => $zona,
-            'equipos' => $stmt->fetchAll(PDO::FETCH_ASSOC)
-        ];
-    }
-}
-
-// *** SI ES TORNEO NORMAL ***
-$tabla_posiciones = [];
-if (!$es_torneo_zonas && $categoria_id) {
-    $stmt = $db->prepare("
-        SELECT 
-            e.id as equipo_id,
-            e.nombre as equipo,
-            e.logo,
-            COUNT(p.id) as partidos_jugados,
-            SUM(CASE 
-                WHEN (p.equipo_local_id = e.id AND p.goles_local > p.goles_visitante) OR 
-                     (p.equipo_visitante_id = e.id AND p.goles_visitante > p.goles_local) 
-                THEN 1 ELSE 0 END) as ganados,
-            SUM(CASE 
-                WHEN p.goles_local = p.goles_visitante AND p.estado = 'finalizado'
-                THEN 1 ELSE 0 END) as empatados,
-            SUM(CASE 
-                WHEN (p.equipo_local_id = e.id AND p.goles_local < p.goles_visitante) OR 
-                     (p.equipo_visitante_id = e.id AND p.goles_visitante < p.goles_local) 
-                THEN 1 ELSE 0 END) as perdidos,
-            SUM(CASE 
-                WHEN p.equipo_local_id = e.id THEN p.goles_local 
-                WHEN p.equipo_visitante_id = e.id THEN p.goles_visitante 
-                ELSE 0 END) as goles_favor,
-            SUM(CASE 
-                WHEN p.equipo_local_id = e.id THEN p.goles_visitante 
-                WHEN p.equipo_visitante_id = e.id THEN p.goles_local 
-                ELSE 0 END) as goles_contra,
-            (SUM(CASE 
-                WHEN p.equipo_local_id = e.id THEN p.goles_local 
-                WHEN p.equipo_visitante_id = e.id THEN p.goles_visitante 
-                ELSE 0 END) - SUM(CASE 
-                WHEN p.equipo_local_id = e.id THEN p.goles_visitante 
-                WHEN p.equipo_visitante_id = e.id THEN p.goles_local 
-                ELSE 0 END)) as diferencia_goles,
-            (SUM(CASE 
-                WHEN (p.equipo_local_id = e.id AND p.goles_local > p.goles_visitante) OR 
-                     (p.equipo_visitante_id = e.id AND p.goles_visitante > p.goles_local) 
-                THEN 3
-                WHEN p.goles_local = p.goles_visitante AND p.estado = 'finalizado'
-                THEN 1 ELSE 0 END)) as puntos
-        FROM equipos e
-        LEFT JOIN partidos p ON (p.equipo_local_id = e.id OR p.equipo_visitante_id = e.id) 
-                              AND p.estado = 'finalizado'
-        WHERE e.categoria_id = ? AND e.activo = 1
-        GROUP BY e.id, e.nombre, e.logo
-        ORDER BY puntos DESC, diferencia_goles DESC, goles_favor DESC, e.nombre ASC
-    ");
-    $stmt->execute([$categoria_id]);
-    $tabla_posiciones = $stmt->fetchAll();
 }
 ?>
 
@@ -136,6 +152,50 @@ if (!$es_torneo_zonas && $categoria_id) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="assets/css/style.css" rel="stylesheet">
+    <style>
+        .zona-card {
+            margin-bottom: 2rem;
+        }
+        .zona-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem;
+            border-radius: 8px 8px 0 0;
+        }
+        .clasificado-badge {
+            background-color: #28a745;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        .position-number {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+            text-align: center;
+            border-radius: 50%;
+            font-weight: bold;
+        }
+        .position-1 {
+            background-color: #FFD700;
+            color: #000;
+        }
+        .position-2 {
+            background-color: #C0C0C0;
+            color: #000;
+        }
+        .position-3 {
+            background-color: #CD7F32;
+            color: #fff;
+        }
+        .position-champion {
+            background-color: #28a745;
+            color: #fff;
+        }
+    </style>
 </head>
 <body>
     <!-- Header -->
@@ -159,10 +219,10 @@ if (!$es_torneo_zonas && $categoria_id) {
                 </ul>
                 <ul class="navbar-nav">
                     <?php if (isLoggedIn()): ?>
-                        <li class="nav-item"><a class="nav-link" href="admin/dashboard.php"><i class="fas fa-tachometer-alt"></i> Panel Admin</a></li>
+                        <li class="nav-item"><a class="nav-link" href="../admin/dashboard.php"><i class="fas fa-tachometer-alt"></i> Panel Admin</a></li>
                         <li class="nav-item"><a class="nav-link" href="logout.php"><i class="fas fa-sign-out-alt"></i> Salir</a></li>
                     <?php else: ?>
-                        <li class="nav-item"><a class="nav-link" href="login.php"><i class="fas fa-sign-in-alt"></i> Ingresar</a></li>
+                        <li class="nav-item"><a class="nav-link" href="../login.php"><i class="fas fa-sign-in-alt"></i> Ingresar</a></li>
                     <?php endif; ?>
                 </ul>
             </div>
@@ -173,7 +233,7 @@ if (!$es_torneo_zonas && $categoria_id) {
         <div class="row">
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h2><i class="fas fa-list"></i> Tablas de Posiciones</h2>
+                    <h2><i class="fas fa-list"></i> Tablas de Posiciones</h2>                    
                 </div>
 
                 <?php if (empty($categorias)): ?>
@@ -203,121 +263,102 @@ if (!$es_torneo_zonas && $categoria_id) {
                     </div>
 
                     <?php if ($categoria_actual): ?>
-                        <?php if ($es_torneo_zonas): ?>
-                            <!-- *** VISTA DE TORNEO CON ZONAS *** -->
-                            <div class="alert alert-info">
-                                <i class="fas fa-info-circle"></i> Este es un torneo con <strong><?= count($zonas) ?> zonas</strong> y fase eliminatoria
+                        <?php if ($tiene_zonas && !empty($tablas_por_zona)): ?>
+                            <!-- TABLAS POR ZONA -->
+                            <div class="alert alert-info mb-4">
+                                <i class="fas fa-info-circle"></i> <strong>Torneo con zonas:</strong> Los equipos compiten dentro de sus respectivas zonas. Los mejores clasificados avanzan a la fase eliminatoria.
                             </div>
-
-                            <!-- Tabs de Zonas -->
-                            <ul class="nav nav-tabs mb-3" id="zonasTab" role="tablist">
-                                <?php foreach ($zonas as $index => $zona): ?>
-                                    <li class="nav-item" role="presentation">
-                                        <button class="nav-link <?= $index === 0 ? 'active' : '' ?>" 
-                                                id="zona-<?= $zona['id'] ?>-tab" 
-                                                data-bs-toggle="tab" 
-                                                data-bs-target="#zona-<?= $zona['id'] ?>" 
-                                                type="button">
-                                            <?= htmlspecialchars($zona['nombre']) ?>
-                                        </button>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
-
-                            <!-- Contenido de Tabs -->
-                            <div class="tab-content" id="zonasTabContent">
-                                <?php foreach ($zonas as $index => $zona): ?>
-                                    <div class="tab-pane fade <?= $index === 0 ? 'show active' : '' ?>" 
-                                         id="zona-<?= $zona['id'] ?>" 
-                                         role="tabpanel">
-                                        <div class="card">
-                                            <div class="card-header bg-success text-white">
-                                                <h4 class="mb-0">
-                                                    <i class="fas fa-trophy"></i> 
-                                                    <?= htmlspecialchars($zona['nombre']) ?>
-                                                </h4>
-                                            </div>
-                                            <div class="card-body p-0">
-                                                <?php if (empty($tablas_por_zona[$zona['id']]['equipos'])): ?>
-                                                    <div class="p-4 text-center">
-                                                        <i class="fas fa-list fa-3x text-muted mb-3"></i>
-                                                        <h5 class="text-muted">No hay equipos en esta zona</h5>
-                                                    </div>
-                                                <?php else: ?>
-                                                    <div class="table-responsive">
-                                                        <table class="table table-hover mb-0">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th class="text-center">Pos</th>
-                                                                    <th>Equipo</th>
-                                                                    <th class="text-center">PJ</th>
-                                                                    <th class="text-center">G</th>
-                                                                    <th class="text-center">E</th>
-                                                                    <th class="text-center">P</th>
-                                                                    <th class="text-center">GF</th>
-                                                                    <th class="text-center">GC</th>
-                                                                    <th class="text-center">DG</th>
-                                                                    <th class="text-center">Pts</th>
+                            
+                            <?php foreach ($tablas_por_zona as $zona_id => $zona_data): ?>
+                                <div class="zona-card">
+                                    <div class="zona-header">
+                                        <h4 class="mb-0">
+                                            <i class="fas fa-layer-group"></i> <?php echo htmlspecialchars($zona_data['zona']['nombre']); ?>
+                                        </h4>
+                                    </div>
+                                    <div class="card">
+                                        <div class="card-body p-0">
+                                            <?php if (empty($zona_data['equipos'])): ?>
+                                                <div class="p-4 text-center">
+                                                    <i class="fas fa-list fa-3x text-muted mb-3"></i>
+                                                    <h5 class="text-muted">No hay equipos en esta zona</h5>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="table-responsive">
+                                                    <table class="table table-hover mb-0">
+                                                        <thead>
+                                                            <tr>
+                                                                <th class="text-center">Pos</th>
+                                                                <th>Equipo</th>
+                                                                <th class="text-center">PJ</th>
+                                                                <th class="text-center">G</th>
+                                                                <th class="text-center">E</th>
+                                                                <th class="text-center">P</th>
+                                                                <th class="text-center">GF</th>
+                                                                <th class="text-center">GC</th>
+                                                                <th class="text-center">DG</th>
+                                                                <th class="text-center">Pts</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <?php foreach ($zona_data['equipos'] as $index => $equipo): ?>
+                                                                <?php
+                                                                $posicion = $index + 1;
+                                                                $clase_posicion = '';
+                                                                if ($posicion == 1) $clase_posicion = 'position-1';
+                                                                elseif ($posicion == 2) $clase_posicion = 'position-2';
+                                                                elseif ($posicion <= 4) $clase_posicion = 'position-champion';
+                                                                ?>
+                                                                <tr class="<?php echo $equipo['clasificado'] ? 'table-success' : ''; ?>">
+                                                                    <td class="text-center">
+                                                                        <span class="position-number <?php echo $clase_posicion; ?>">
+                                                                            <?php echo $posicion; ?>
+                                                                        </span>
+                                                                    </td>
+                                                                    <td>
+                                                                        <div class="d-flex align-items-center">
+                                                                            <?php if ($equipo['logo']): ?>
+                                                                                <img src="../uploads/<?php echo htmlspecialchars($equipo['logo']); ?>" 
+                                                                                     alt="Logo" class="me-2" width="30" height="30" 
+                                                                                     style="object-fit: cover; border-radius: 50%;">
+                                                                            <?php else: ?>
+                                                                                <div class="bg-secondary rounded-circle me-2 d-flex align-items-center justify-content-center" 
+                                                                                     style="width: 30px; height: 30px;">
+                                                                                    <i class="fas fa-shield-alt text-white"></i>
+                                                                                </div>
+                                                                            <?php endif; ?>
+                                                                            <strong><?php echo htmlspecialchars($equipo['equipo']); ?></strong>
+                                                                            <?php if ($equipo['clasificado']): ?>
+                                                                                <span class="clasificado-badge ms-2">CLASIFICADO</span>
+                                                                            <?php endif; ?>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td class="text-center"><?php echo $equipo['partidos_jugados']; ?></td>
+                                                                    <td class="text-center text-success fw-bold"><?php echo $equipo['ganados']; ?></td>
+                                                                    <td class="text-center text-warning fw-bold"><?php echo $equipo['empatados']; ?></td>
+                                                                    <td class="text-center text-danger fw-bold"><?php echo $equipo['perdidos']; ?></td>
+                                                                    <td class="text-center"><?php echo $equipo['goles_favor']; ?></td>
+                                                                    <td class="text-center"><?php echo $equipo['goles_contra']; ?></td>
+                                                                    <td class="text-center">
+                                                                        <span class="<?php echo $equipo['diferencia_goles'] > 0 ? 'text-success' : ($equipo['diferencia_goles'] < 0 ? 'text-danger' : ''); ?>">
+                                                                            <?php echo $equipo['diferencia_goles'] > 0 ? '+' : ''; ?><?php echo $equipo['diferencia_goles']; ?>
+                                                                        </span>
+                                                                    </td>
+                                                                    <td class="text-center">
+                                                                        <span class="badge bg-primary fs-6"><?php echo $equipo['puntos']; ?></span>
+                                                                    </td>
                                                                 </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                <?php foreach ($tablas_por_zona[$zona['id']]['equipos'] as $pos => $equipo): ?>
-                                                                    <?php
-                                                                    $posicion = $pos + 1;
-                                                                    $clase_posicion = '';
-                                                                    if ($posicion == 1) $clase_posicion = 'position-1';
-                                                                    elseif ($posicion == 2) $clase_posicion = 'position-2';
-                                                                    elseif ($posicion == 3) $clase_posicion = 'position-3';
-                                                                    ?>
-                                                                    <tr>
-                                                                        <td class="text-center">
-                                                                            <span class="position-number <?php echo $clase_posicion; ?>">
-                                                                                <?php echo $posicion; ?>
-                                                                            </span>
-                                                                        </td>
-                                                                        <td>
-                                                                            <div class="d-flex align-items-center">
-                                                                                <?php if ($equipo['logo']): ?>
-                                                                                    <img src="../uploads/<?php echo htmlspecialchars($equipo['logo']); ?>" 
-                                                                                         alt="Logo" class="me-2" width="30" height="30" 
-                                                                                         style="object-fit: cover; border-radius: 50%;">
-                                                                                <?php else: ?>
-                                                                                    <div class="bg-secondary rounded-circle me-2 d-flex align-items-center justify-content-center" 
-                                                                                         style="width: 30px; height: 30px;">
-                                                                                        <i class="fas fa-shield-alt text-white"></i>
-                                                                                    </div>
-                                                                                <?php endif; ?>
-                                                                                <strong><?php echo htmlspecialchars($equipo['equipo']); ?></strong>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td class="text-center"><?php echo $equipo['partidos_jugados']; ?></td>
-                                                                        <td class="text-center text-success fw-bold"><?php echo $equipo['partidos_ganados']; ?></td>
-                                                                        <td class="text-center text-warning fw-bold"><?php echo $equipo['partidos_empatados']; ?></td>
-                                                                        <td class="text-center text-danger fw-bold"><?php echo $equipo['partidos_perdidos']; ?></td>
-                                                                        <td class="text-center"><?php echo $equipo['goles_favor']; ?></td>
-                                                                        <td class="text-center"><?php echo $equipo['goles_contra']; ?></td>
-                                                                        <td class="text-center">
-                                                                            <span class="<?php echo $equipo['diferencia_gol'] > 0 ? 'text-success' : ($equipo['diferencia_gol'] < 0 ? 'text-danger' : ''); ?>">
-                                                                                <?php echo $equipo['diferencia_gol'] > 0 ? '+' : ''; ?><?php echo $equipo['diferencia_gol']; ?>
-                                                                            </span>
-                                                                        </td>
-                                                                        <td class="text-center">
-                                                                            <span class="badge bg-primary fs-6"><?php echo $equipo['puntos']; ?></span>
-                                                                        </td>
-                                                                    </tr>
-                                                                <?php endforeach; ?>
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                <?php endif; ?>
-                                            </div>
+                                                            <?php endforeach; ?>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
-                                <?php endforeach; ?>
-                            </div>
-
+                                </div>
+                            <?php endforeach; ?>
                         <?php else: ?>
-                            <!-- *** VISTA DE TORNEO NORMAL *** -->
+                            <!-- TABLA NORMAL (SIN ZONAS) -->
                             <div class="card">
                                 <div class="card-header bg-success text-white">
                                     <h4 class="mb-0">
@@ -357,7 +398,6 @@ if (!$es_torneo_zonas && $categoria_id) {
                                                         elseif ($posicion == 2) $clase_posicion = 'position-2';
                                                         elseif ($posicion == 3) $clase_posicion = 'position-3';
                                                         elseif ($posicion <= 4) $clase_posicion = 'position-champion';
-                                                        elseif ($posicion > count($tabla_posiciones) - 2) $clase_posicion = 'position-relegation';
                                                         ?>
                                                         <tr>
                                                             <td class="text-center">
@@ -411,9 +451,11 @@ if (!$es_torneo_zonas && $categoria_id) {
                                 <div class="row">
                                     <div class="col-md-6">
                                         <small>
-                                            <span class="position-number position-1 me-1">1</span> Campeón<br>
-                                            <span class="position-number position-2 me-1">2</span> Subcampeón<br>
+                                            <span class="position-number position-1 me-1">1</span> <?php echo $tiene_zonas ? '1° Puesto' : 'Campeón'; ?><br>
+                                            <span class="position-number position-2 me-1">2</span> <?php echo $tiene_zonas ? '2° Puesto' : 'Subcampeón'; ?><br>
+                                            <?php if (!$tiene_zonas): ?>
                                             <span class="position-number position-3 me-1">3</span> Tercer puesto
+                                            <?php endif; ?>
                                         </small>
                                     </div>
                                     <div class="col-md-6">
@@ -446,7 +488,7 @@ if (!$es_torneo_zonas && $categoria_id) {
                     <p class="text-muted">Gestión completa de torneos de fútbol</p>
                 </div>
                 <div class="col-md-6 text-md-end">
-                    <p class="text-muted mb-0">© 2024 Todos los derechos reservados</p>
+                    <p class="text-muted mb-0">© 2025 Todos los derechos reservados</p>
                     <small class="text-muted">Actualizado: <?php echo date('d/m/Y H:i'); ?></small>
                 </div>
             </div>
