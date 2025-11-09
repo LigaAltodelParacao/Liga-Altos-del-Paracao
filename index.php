@@ -1,7 +1,19 @@
 <?php
+// Inicializar variables de entorno
+$current_path = '';
+$is_in_public = false;
+$is_in_admin = false;
+
+// Requerir configuración
 require_once 'config.php';
 
+// Obtener base de datos
 $db = Database::getInstance()->getConnection();
+
+// Configurar detección de contexto ANTES del header
+$current_path = $_SERVER['REQUEST_URI'] ?? '';
+$is_in_public = (strpos($current_path, '/public/') !== false);
+$is_in_admin = (strpos($current_path, '/admin/') !== false);
 
 // Partidos en vivo con logos
 $stmt = $db->query("
@@ -508,75 +520,8 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-success">
-        <div class="container">
-            <a class="navbar-brand" href="index.php">
-                <i class="fas fa-futbol"></i> Altos del Paracao
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="public/resultados.php">Resultados</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="public/tablas.php">Posiciones</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="public/goleadores.php">Goleadores</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="public/fixture.php">Fixture</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="public/sanciones.php">Sanciones</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="public/historial_equipos.php">Equipos</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="public/fairplay.php">Fairplay</a>
-                    </li>
-                    <?php
-                    // Mostrar Torneo Nocturno solo si existe y está activo
-                    try {
-                        $stmtTN = $db->prepare("SELECT id FROM campeonatos WHERE activo = 1 AND nombre LIKE ? LIMIT 1");
-                        $stmtTN->execute(['%Torneo Nocturno%']);
-                        $torneoNocturno = $stmtTN->fetchColumn();
-                        if ($torneoNocturno): ?>
-                            <li class="nav-item">
-                                <a class="nav-link" href="public/torneo_nocturno.php">Torneo Nocturno</a>
-                            </li>
-                        <?php endif;
-                    } catch (Exception $e) { /* silent */ }
-                    ?>
-                </ul>
-                <ul class="navbar-nav">
-                    <?php if (function_exists('isLoggedIn') && isLoggedIn()): ?>
-                        <li class="nav-item">
-                            <a class="nav-link" href="admin/dashboard.php">
-                                <i class="fas fa-tachometer-alt"></i> Panel Admin
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="logout.php">
-                                <i class="fas fa-sign-out-alt"></i> Salir
-                            </a>
-                        </li>
-                    <?php else: ?>
-                        <li class="nav-item">
-                            <a class="nav-link" href="login.php">
-                                <i class="fas fa-sign-in-alt"></i> Ingresar
-                            </a>
-                        </li>
-                    <?php endif; ?>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    <!-- Header inteligente -->
+    <?php include 'include/header.php'; ?>
 
     <!-- Hero Section -->
     <div class="hero-section py-3">

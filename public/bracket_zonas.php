@@ -3,7 +3,7 @@
  * Vista pública del bracket de eliminación directa
  */
 
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 $db = Database::getInstance()->getConnection();
 
@@ -154,7 +154,7 @@ $nombres_fases = [
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-success">
         <div class="container-fluid">
-            <a class="navbar-brand" href="../index.php">
+            <a class="navbar-brand" href="<?php echo SITE_URL; ?>">
                 <i class="fas fa-futbol"></i> Fútbol Manager
             </a>
         </div>

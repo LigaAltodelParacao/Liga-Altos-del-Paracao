@@ -4,7 +4,7 @@
  * Permite cargar resultados y gestionar partidos
  */
 
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/funciones_torneos_zonas.php';
 
 if (!isLoggedIn() || !hasPermission('admin')) {
@@ -190,7 +190,7 @@ $puede_generar_eliminatorias = todosPartidosGruposFinalizados($formato_id, $db);
     </style>
 </head>
 <body>
-    <?php include 'include/sidebar.php'; ?>
+    <?php include __DIR__ . '/include/sidebar.php'; ?>
     
     <div class="container-fluid p-4">
         <div class="row mb-4">

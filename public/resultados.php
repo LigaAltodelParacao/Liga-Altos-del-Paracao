@@ -2,7 +2,7 @@
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 $db = Database::getInstance()->getConnection();
 
 // Obtener categorías activas
@@ -342,63 +342,8 @@ if (!empty($_GET['ajax'])) {
 </head>
 <body>
     <!-- Header -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-success">
-        <div class="container">
-            <a class="navbar-brand" href="../index.php">
-                <i class="fas fa-futbol"></i> Fútbol Manager
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link active" href="resultados.php">Resultados</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="tablas.php">Posiciones</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="goleadores.php">Goleadores</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="fixture.php">Fixture</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="sanciones.php">Sanciones</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="historial_equipos.php">Equipos</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="fairplay.php">Fairplay</a>
-                    </li>
-                </ul>
-                <ul class="navbar-nav">
-                    <?php if (function_exists('isLoggedIn') && isLoggedIn()): ?>
-                        <li class="nav-item">
-                            <a class="nav-link" href="admin/dashboard.php">
-                                <i class="fas fa-tachometer-alt"></i> Panel Admin
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="logout.php">
-                                <i class="fas fa-sign-out-alt"></i> Salir
-                            </a>
-                        </li>
-                    <?php else: ?>
-                        <li class="nav-item">
-                            <a class="nav-link" href="login.php">
-                                <i class="fas fa-sign-in-alt"></i> Ingresar
-                            </a>
-                        </li>
-                    <?php endif; ?>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
-    <div class="container my-4">
+    <?php include '../include/header.php'; ?>
+	    <div class="container my-4">
         <div class="row">
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center mb-4">

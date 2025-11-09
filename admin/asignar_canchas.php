@@ -2,7 +2,7 @@
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 if (!isLoggedIn() || !hasPermission('admin')) {
     redirect('../login.php');
 }
@@ -511,7 +511,7 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
 <title>Asignar Canchas y Horarios</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-<link href="../assets/css/style.css" rel="stylesheet">
+<link href="<?php echo SITE_URL; ?>assets/css/style.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <style>
 .bloque { padding:3px; color:#fff; border-radius:4px; margin:1px 0; font-size:12px; text-align:center; }
@@ -532,17 +532,17 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-success">
     <div class="container-fluid">
-        <a class="navbar-brand" href="../index.php"><i class="fas fa-futbol"></i> Fútbol Manager - Admin</a>
+        <a class="navbar-brand" href="<?php echo SITE_URL; ?>"><i class="fas fa-futbol"></i> Fútbol Manager - Admin</a>
         <div class="navbar-nav ms-auto">
             <a class="nav-link" href="dashboard.php">Dashboard</a>
-            <a class="nav-link" href="../logout.php">Salir</a>
+            <a class="nav-link" href="<?php echo SITE_URL; ?>logout.php">Salir</a>
         </div>
     </div>
 </nav>
 <div class="container-fluid">
 <div class="row">
     <div class="col-md-3 col-lg-2 p-0">
-        <?php include 'include/sidebar.php'; ?>
+        <?php include __DIR__ . '/include/sidebar.php'; ?>
     </div>
     <div class="col-md-9 col-lg-10 p-4">
         <h2><i class="fas fa-map-marker-alt"></i> Asignación de Canchas y Horarios</h2>

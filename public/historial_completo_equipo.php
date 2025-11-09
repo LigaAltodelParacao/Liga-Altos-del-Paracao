@@ -2,7 +2,7 @@
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 if (!function_exists('calculateAge')) {
     function calculateAge($fechaNacimiento) {
@@ -279,7 +279,7 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
     <title>Historial Completo - <?php echo htmlspecialchars($nombre_equipo); ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="../assets/css/style.css" rel="stylesheet">
+    <link href="<?php echo SITE_URL; ?>assets/css/style.css" rel="stylesheet">
     <style>
         .stat-card {
             transition: transform 0.2s;
@@ -309,7 +309,7 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-success">
         <div class="container">
-            <a class="navbar-brand" href="../index.php"><i class="fas fa-futbol"></i> Fútbol Manager</a>
+            <a class="navbar-brand" href="<?php echo SITE_URL; ?>"><i class="fas fa-futbol"></i> Fútbol Manager</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -324,9 +324,9 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
                 <ul class="navbar-nav">
                     <?php if (function_exists('isLoggedIn') && isLoggedIn()): ?>
                         <li class="nav-item"><a class="nav-link" href="../admin/dashboard.php"><i class="fas fa-tachometer-alt"></i> Panel Admin</a></li>
-                        <li class="nav-item"><a class="nav-link" href="../logout.php"><i class="fas fa-sign-out-alt"></i> Salir</a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?php echo SITE_URL; ?>logout.php"><i class="fas fa-sign-out-alt"></i> Salir</a></li>
                     <?php else: ?>
-                        <li class="nav-item"><a class="nav-link" href="../login.php"><i class="fas fa-sign-in-alt"></i> Ingresar</a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?php echo SITE_URL; ?>login.php"><i class="fas fa-sign-in-alt"></i> Ingresar</a></li>
                     <?php endif; ?>
                 </ul>
             </div>

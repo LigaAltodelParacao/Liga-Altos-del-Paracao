@@ -8,7 +8,7 @@
  * en el sistema de descuento automático de sanciones.
  */
 
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 if (!isLoggedIn() || !hasPermission('admin')) {
     die('Acceso denegado');

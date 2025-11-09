@@ -8,7 +8,7 @@ define('DB_USER', 'u959527289_Nuevo');
 define('DB_PASS', '98Nuevo12');
 
 // Configuración general
-define('SITE_URL', 'https://salmon-frog-819056.hostingersite.com//');
+define('SITE_URL', 'https://salmon-frog-819056.hostingersite.com/');
 define('UPLOAD_PATH', __DIR__ . '/uploads/');
 define('MAX_FILE_SIZE', 5 * 1024 * 1024); // 5MB
 

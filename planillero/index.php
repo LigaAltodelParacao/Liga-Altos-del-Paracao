@@ -1,6 +1,6 @@
 <?php
 date_default_timezone_set('America/Argentina/Buenos_Aires');
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 if (!isLoggedIn() || !hasPermission('planillero')) {
     redirect('../login.php');
@@ -164,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['codigo_acceso'])) {
                 </div>
                 
                 <div class="text-center mt-4">
-                    <a href="../logout.php" class="text-white">
+                    <a href="<?php echo SITE_URL; ?>logout.php" class="text-white">
                         <i class="fas fa-sign-out-alt"></i> Salir del sistema
                     </a>
                 </div>

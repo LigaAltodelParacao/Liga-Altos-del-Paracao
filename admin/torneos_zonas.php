@@ -1,5 +1,5 @@
 <?php
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 if (!isLoggedIn() || !hasPermission('admin')) {
     redirect('../login.php');
@@ -73,17 +73,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_torneo'])) {
     <title>Torneos con Zonas y Eliminatorias</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="../assets/css/style.css" rel="stylesheet">
+    <link href="<?php echo SITE_URL; ?>assets/css/style.css" rel="stylesheet">
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-success">
         <div class="container-fluid">
-            <a class="navbar-brand" href="../index.php">
+            <a class="navbar-brand" href="<?php echo SITE_URL; ?>">
                 <i class="fas fa-futbol"></i> Fútbol Manager
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="dashboard.php">Dashboard</a>
-                <a class="nav-link" href="../logout.php">Salir</a>
+                <a class="nav-link" href="<?php echo SITE_URL; ?>logout.php">Salir</a>
             </div>
         </div>
     </nav>
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_torneo'])) {
     <div class="container-fluid">
         <div class="row">
             <div class="col-md-3 col-lg-2 p-0">
-                <?php include 'include/sidebar.php'; ?>
+                <?php include __DIR__ . '/include/sidebar.php'; ?>
             </div>
 
             <div class="col-md-9 col-lg-10 p-4">

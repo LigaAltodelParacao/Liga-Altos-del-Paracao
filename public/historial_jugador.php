@@ -1,5 +1,5 @@
 <?php
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 if (!isLoggedIn()) {
     redirect('../login.php');
@@ -67,7 +67,7 @@ function calculateAge($birthDate) {
     <title>Historial de <?php echo htmlspecialchars($jugador['apellido_nombre']); ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="../assets/css/style.css" rel="stylesheet">
+    <link href="<?php echo SITE_URL; ?>assets/css/style.css" rel="stylesheet">
     <style>
         .player-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -133,14 +133,14 @@ function calculateAge($birthDate) {
     <!-- Header -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-success">
         <div class="container-fluid">
-            <a class="navbar-brand" href="../index.php">
+            <a class="navbar-brand" href="<?php echo SITE_URL; ?>">
                 <i class="fas fa-futbol"></i> Fútbol Manager
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="jugadores.php">
                     <i class="fas fa-arrow-left"></i> Volver
                 </a>
-                <a class="nav-link" href="../logout.php">
+                <a class="nav-link" href="<?php echo SITE_URL; ?>logout.php">
                     <i class="fas fa-sign-out-alt"></i> Salir
                 </a>
             </div>

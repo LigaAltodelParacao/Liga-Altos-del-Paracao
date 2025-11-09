@@ -1,5 +1,5 @@
 <?php
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 if (!isLoggedIn()) {
     http_response_code(403);
     exit('Acceso denegado');

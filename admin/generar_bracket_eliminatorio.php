@@ -1,5 +1,5 @@
 <?php
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 if (!isLoggedIn() || !hasPermission('admin')) {
 	redirect('../login.php');
@@ -259,12 +259,12 @@ if (!isset($_POST['generar_bracket'])) {
 <body>
 	<nav class="navbar navbar-expand-lg navbar-dark bg-success">
 		<div class="container-fluid">
-			<a class="navbar-brand" href="../index.php">
+			<a class="navbar-brand" href="<?php echo SITE_URL; ?>">
 				<i class="fas fa-futbol"></i> Fútbol Manager
 			</a>
 			<div class="navbar-nav ms-auto">
 				<a class="nav-link" href="dashboard.php">Dashboard</a>
-				<a class="nav-link" href="../logout.php">Salir</a>
+				<a class="nav-link" href="<?php echo SITE_URL; ?>logout.php">Salir</a>
 			</div>
 		</div>
 	</nav>

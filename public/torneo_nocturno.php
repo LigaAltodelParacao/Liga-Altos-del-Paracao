@@ -1,5 +1,5 @@
 <?php
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 $db = Database::getInstance()->getConnection();
 
@@ -421,27 +421,7 @@ if (!empty($categoria_ids)) {
 </head>
 <body>
     <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-success">
-        <div class="container">
-            <a class="navbar-brand" href="../index.php">
-                <i class="fas fa-futbol"></i> Altos del Paracao
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="../public/resultados.php">Resultados</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../public/tablas.php">Posiciones</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../public/goleadores.php">Goleadores</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../public/fixture.php">Fixture</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../public/sanciones.php">Sanciones</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../public/historial_equipos.php">Equipos</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../public/fairplay.php">Fairplay</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+     <?php include '../include/header.php'; ?>
 
     <!-- Hero Section -->
     <div class="hero-section py-4">

@@ -1,5 +1,5 @@
 <?php
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 if (!isLoggedIn() || !hasPermission('admin')) {
     redirect('../login.php');
@@ -225,20 +225,20 @@ if (isset($_GET['partido'])) {
     <title>Eventos en Vivo - Sistema de Campeonatos</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="../assets/css/style.css" rel="stylesheet">
+    <link href="<?php echo SITE_URL; ?>assets/css/style.css" rel="stylesheet">
 </head>
 <body>
     <!-- Header -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-success">
         <div class="container-fluid">
-            <a class="navbar-brand" href="../index.php">
+            <a class="navbar-brand" href="<?php echo SITE_URL; ?>">
                 <i class="fas fa-futbol"></i> Fútbol Manager - Eventos en Vivo
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="dashboard.php">
                     <i class="fas fa-tachometer-alt"></i> Dashboard
                 </a>
-                <a class="nav-link" href="../logout.php">
+                <a class="nav-link" href="<?php echo SITE_URL; ?>logout.php">
                     <i class="fas fa-sign-out-alt"></i> Salir
                 </a>
             </div>
@@ -249,7 +249,7 @@ if (isset($_GET['partido'])) {
         <div class="row">
             <!-- Sidebar -->
             <div class="col-md-3 col-lg-2 p-0">
-                <?php include 'include/sidebar.php'; ?>
+                <?php include __DIR__ . '/include/sidebar.php'; ?>
             </div>
 
             <!-- Main Content -->

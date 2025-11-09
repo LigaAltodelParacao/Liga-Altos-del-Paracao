@@ -1,6 +1,6 @@
 <?php
 // (El código PHP inicial hasta la línea 220 es el mismo que tenías y es correcto)
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 if (!isLoggedIn() || !hasPermission('planillero')) {
     redirect('../login.php');

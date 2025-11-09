@@ -1,5 +1,5 @@
 <?php
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 if (!isLoggedIn() || !hasPermission(['superadmin','admin'])) {
     redirect('../login.php');
@@ -61,7 +61,7 @@ $fechas = $db->query("SELECT id, numero_fecha FROM fechas")->fetchAll(PDO::FETCH
 <meta charset="UTF-8">
 <title>Crear Planillero</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
-<link href="../assets/css/style.css" rel="stylesheet">
+<link href="<?php echo SITE_URL; ?>assets/css/style.css" rel="stylesheet">
 </head>
 <body>
 <div class="container my-5">

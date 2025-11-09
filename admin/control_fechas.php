@@ -409,7 +409,7 @@ if ($es_torneo_zonas && $categoria_id) {
     <title>Control de Fechas - Sistema de Campeonatos</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="../assets/css/style.css" rel="stylesheet">
+    <link href="<?php echo SITE_URL; ?>assets/css/style.css" rel="stylesheet">
     <style>
         .partido-card {
             border: none;
@@ -506,12 +506,12 @@ if ($es_torneo_zonas && $categoria_id) {
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-success">
         <div class="container-fluid">
-            <a class="navbar-brand" href="../index.php">
+            <a class="navbar-brand" href="<?php echo SITE_URL; ?>">
                 <i class="fas fa-futbol"></i> Fútbol Manager - Admin
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="dashboard.php">Dashboard</a>                
-                <a class="nav-link" href="../logout.php">Salir</a>
+                <a class="nav-link" href="<?php echo SITE_URL; ?>logout.php">Salir</a>
             </div>
         </div>
     </nav>

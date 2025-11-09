@@ -1,5 +1,5 @@
 <?php
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 if (!isLoggedIn() || !hasPermission('admin')) {
     redirect('../login.php');
@@ -200,7 +200,7 @@ if ($partido_id) {
 <title>Eventos - Sistema de Campeonatos</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-<link href="../assets/css/style.css" rel="stylesheet">
+<link href="<?php echo SITE_URL; ?>assets/css/style.css" rel="stylesheet">
 </head>
 <body>
 

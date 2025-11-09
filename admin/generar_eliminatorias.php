@@ -1,5 +1,5 @@
 <?php
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/funciones_torneos_zonas.php';
 
 if (!isLoggedIn() || !hasPermission('admin')) {

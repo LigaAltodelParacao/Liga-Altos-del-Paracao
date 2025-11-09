@@ -3,7 +3,7 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 $db = Database::getInstance()->getConnection();
 $jugador_id = (int)($_GET['id'] ?? 0);
@@ -115,7 +115,7 @@ if (($dest['partidos'] + $dest['goles'] + $dest['amarillas'] + $dest['rojas']) =
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-success">
   <div class="container-fluid">
-    <a class="navbar-brand" href="../index.php"><i class="fas fa-futbol"></i> Fútbol Manager</a>
+    <a class="navbar-brand" href="<?php echo SITE_URL; ?>"><i class="fas fa-futbol"></i> Fútbol Manager</a>
     <div class="navbar-nav ms-auto">
       <a class="nav-link" href="#" onclick="history.back(); return false;"><i class="fas fa-arrow-left"></i> Volver</a>
     </div>
