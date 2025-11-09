@@ -119,6 +119,155 @@ foreach ($categorias as $cat) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="assets/css/style.css" rel="stylesheet">
+    <style>
+        /* Estilos móviles para tablas */
+        @media (max-width: 768px) {
+            .container {
+                padding-left: 8px;
+                padding-right: 8px;
+            }
+            
+            h2 {
+                font-size: 1.5rem;
+            }
+            
+            .card-body {
+                padding: 0.75rem;
+            }
+            
+            /* Tabla responsive compacta - mostrar TODAS las columnas */
+            .table-responsive {
+                font-size: 0.65rem;
+            }
+            
+            .table thead th {
+                padding: 0.4rem 0.2rem;
+                font-size: 0.65rem;
+                white-space: nowrap;
+            }
+            
+            .table tbody td {
+                padding: 0.4rem 0.2rem;
+                font-size: 0.65rem;
+            }
+            
+            .table th, .table td {
+                vertical-align: middle;
+            }
+            
+            /* Logos más pequeños en móviles */
+            .table img {
+                width: 18px !important;
+                height: 18px !important;
+            }
+            
+            /* Ajustar badges y números */
+            .badge {
+                font-size: 0.6rem;
+                padding: 0.2rem 0.4rem;
+            }
+            
+            .position-number {
+                font-size: 0.75rem;
+            }
+            
+            /* Cards más compactos */
+            .card {
+                margin-bottom: 1rem;
+            }
+            
+            .card-header {
+                padding: 0.6rem;
+                font-size: 0.85rem;
+            }
+            
+            /* Selector de categoría */
+            .col-md-6 {
+                margin-bottom: 0.5rem;
+            }
+            
+            h5 {
+                font-size: 0.95rem;
+            }
+            
+            /* Leyenda más compacta */
+            .card-body small {
+                font-size: 0.7rem;
+            }
+            
+            /* Equipo name más pequeño */
+            .table td strong {
+                font-size: 0.65rem;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            /* En pantallas muy pequeñas, hacer la tabla aún más compacta */
+            .table-responsive {
+                font-size: 0.6rem;
+            }
+            
+            .table thead th {
+                padding: 0.35rem 0.15rem;
+                font-size: 0.6rem;
+            }
+            
+            .table tbody td {
+                padding: 0.35rem 0.15rem;
+                font-size: 0.6rem;
+            }
+            
+            .table img {
+                width: 16px !important;
+                height: 16px !important;
+            }
+            
+            .badge {
+                font-size: 0.55rem;
+                padding: 0.15rem 0.3rem;
+            }
+            
+            .position-number {
+                font-size: 0.7rem;
+            }
+            
+            .table td strong {
+                font-size: 0.6rem;
+            }
+            
+            h2 {
+                font-size: 1.25rem;
+            }
+            
+            .d-flex.justify-content-between {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+            
+            .card-body {
+                padding: 0.5rem;
+            }
+        }
+        
+        /* Mejorar legibilidad en todas las pantallas */
+        .table-responsive {
+            border-radius: 0.375rem;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        /* Asegurar que las tablas sean scrollables horizontalmente si es necesario */
+        .table {
+            min-width: 100%;
+            width: max-content;
+        }
+        
+        @media (min-width: 769px) {
+            .table {
+                width: 100%;
+            }
+        }
+    </style>
 </head>
 <body>
     <!-- Header -->
@@ -127,7 +276,7 @@ foreach ($categorias as $cat) {
     <div class="container my-5">
         <div class="row">
             <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
                     <h2><i class="fas fa-list"></i> Tablas de Posiciones</h2>                    
                 </div>
 
@@ -227,21 +376,21 @@ foreach ($categorias as $cat) {
                                                                                 <?php endif; ?>
                                                                                 <strong><?php echo htmlspecialchars($equipo['equipo']); ?></strong>
                                                                             </div>
-                                                                        </td>
-                                                                        <td class="text-center"><?php echo $equipo['partidos_jugados']; ?></td>
-                                                                        <td class="text-center text-success fw-bold"><?php echo $equipo['partidos_ganados']; ?></td>
-                                                                        <td class="text-center text-warning fw-bold"><?php echo $equipo['partidos_empatados']; ?></td>
-                                                                        <td class="text-center text-danger fw-bold"><?php echo $equipo['partidos_perdidos']; ?></td>
-                                                                        <td class="text-center"><?php echo $equipo['goles_favor']; ?></td>
-                                                                        <td class="text-center"><?php echo $equipo['goles_contra']; ?></td>
-                                                                        <td class="text-center">
-                                                                            <span class="<?php echo $equipo['diferencia_gol'] > 0 ? 'text-success' : ($equipo['diferencia_gol'] < 0 ? 'text-danger' : ''); ?>">
-                                                                                <?php echo $equipo['diferencia_gol'] > 0 ? '+' : ''; ?><?php echo $equipo['diferencia_gol']; ?>
-                                                                            </span>
-                                                                        </td>
-                                                                        <td class="text-center">
-                                                                            <span class="badge bg-primary fs-6"><?php echo $equipo['puntos']; ?></span>
-                                                                        </td>
+                                                                    </td>
+                                                                    <td class="text-center"><?php echo $equipo['partidos_jugados']; ?></td>
+                                                                    <td class="text-center text-success fw-bold"><?php echo $equipo['partidos_ganados']; ?></td>
+                                                                    <td class="text-center text-warning fw-bold"><?php echo $equipo['partidos_empatados']; ?></td>
+                                                                    <td class="text-center text-danger fw-bold"><?php echo $equipo['partidos_perdidos']; ?></td>
+                                                                    <td class="text-center"><?php echo $equipo['goles_favor']; ?></td>
+                                                                    <td class="text-center"><?php echo $equipo['goles_contra']; ?></td>
+                                                                    <td class="text-center">
+                                                                        <span class="<?php echo $equipo['diferencia_gol'] > 0 ? 'text-success' : ($equipo['diferencia_gol'] < 0 ? 'text-danger' : ''); ?>">
+                                                                            <?php echo $equipo['diferencia_gol'] > 0 ? '+' : ''; ?><?php echo $equipo['diferencia_gol']; ?>
+                                                                        </span>
+                                                                    </td>
+                                                                    <td class="text-center">
+                                                                        <span class="badge bg-primary"><?php echo $equipo['puntos']; ?></span>
+                                                                    </td>
                                                                     </tr>
                                                                 <?php endforeach; ?>
                                                             </tbody>
@@ -329,7 +478,7 @@ foreach ($categorias as $cat) {
                                                                 </span>
                                                             </td>
                                                             <td class="text-center">
-                                                                <span class="badge bg-primary fs-6"><?php echo $equipo['puntos']; ?></span>
+                                                                <span class="badge bg-primary"><?php echo $equipo['puntos']; ?></span>
                                                             </td>
                                                         </tr>
                                                     <?php endforeach; ?>

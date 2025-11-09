@@ -384,27 +384,105 @@ if (!empty($categoria_ids)) {
 
         /* Responsive */
         @media (max-width: 768px) {
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            h1, h2 {
+                font-size: 1.5rem;
+            }
+            
             .tab-pane {
-                padding: 20px 15px;
+                padding: 15px 10px;
             }
 
             .nav-tabs {
                 overflow-x: auto;
                 flex-wrap: nowrap;
                 white-space: nowrap;
+                -webkit-overflow-scrolling: touch;
             }
 
             .nav-tabs .nav-link {
-                padding: 10px 15px;
-                font-size: 0.9rem;
+                padding: 8px 12px;
+                font-size: 0.85rem;
             }
 
             .card-body {
-                padding: 20px 15px;
+                padding: 15px 10px;
             }
 
             .table-responsive {
-                font-size: 0.9rem;
+                font-size: 0.8rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.5rem 0.3rem;
+                font-size: 0.8rem;
+            }
+            
+            .table th.d-none-mobile,
+            .table td.d-none-mobile {
+                display: none;
+            }
+            
+            .table th.hide-xs,
+            .table td.hide-xs {
+                display: none;
+            }
+            
+            .table img {
+                width: 20px !important;
+                height: 20px !important;
+            }
+            
+            .team-logo, .team-initial {
+                width: 22px;
+                height: 22px;
+                font-size: 0.7rem;
+            }
+            
+            .col-lg-6, .col-md-6, .col-md-4, .col-lg-3 {
+                margin-bottom: 0.75rem;
+            }
+            
+            .stats-card {
+                padding: 15px;
+            }
+            
+            .hero-section {
+                padding: 1rem;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            h1, h2 {
+                font-size: 1.25rem;
+            }
+            
+            .tab-pane {
+                padding: 10px 5px;
+            }
+            
+            .nav-tabs .nav-link {
+                padding: 6px 10px;
+                font-size: 0.8rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.4rem 0.2rem;
+                font-size: 0.75rem;
+            }
+            
+            .team-logo, .team-initial {
+                width: 18px;
+                height: 18px;
+                font-size: 0.65rem;
+            }
+            
+            .col-6 {
+                margin-bottom: 0.5rem;
             }
         }
 
@@ -515,10 +593,10 @@ if (!empty($categoria_ids)) {
                                                                 <th>#</th>
                                                                 <th>Equipo</th>
                                                                 <th>Pts</th>
-                                                                <th>PJ</th>
-                                                                <th>GF</th>
-                                                                <th>GC</th>
-                                                                <th>Dif</th>
+                                                                <th class="d-none-mobile">PJ</th>
+                                                                <th class="hide-xs">GF</th>
+                                                                <th class="hide-xs">GC</th>
+                                                                <th class="d-none-mobile">Dif</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
@@ -543,10 +621,10 @@ if (!empty($categoria_ids)) {
                                                                         </div>
                                                                     </td>
                                                                     <td><strong><?php echo (int)$r['puntos']; ?></strong></td>
-                                                                    <td><?php echo (int)$r['partidos_jugados']; ?></td>
-                                                                    <td><?php echo (int)$r['goles_favor']; ?></td>
-                                                                    <td><?php echo (int)$r['goles_contra']; ?></td>
-                                                                    <td>
+                                                                    <td class="d-none-mobile"><?php echo (int)$r['partidos_jugados']; ?></td>
+                                                                    <td class="hide-xs"><?php echo (int)$r['goles_favor']; ?></td>
+                                                                    <td class="hide-xs"><?php echo (int)$r['goles_contra']; ?></td>
+                                                                    <td class="d-none-mobile">
                                                                         <span class="badge <?= $r['diferencia_gol'] >= 0 ? 'bg-success' : 'bg-danger' ?>">
                                                                             <?php echo (int)$r['diferencia_gol']; ?>
                                                                         </span>
@@ -614,19 +692,19 @@ if (!empty($categoria_ids)) {
                                                     <table class="table table-striped">
                                                         <thead>
                                                             <tr>
-                                                                <th>Fecha</th>
-                                                                <th>Hora</th>
+                                                                <th class="hide-xs">Fecha</th>
+                                                                <th class="d-none-mobile">Hora</th>
                                                                 <th>Local</th>
                                                                 <th></th>
                                                                 <th>Visitante</th>
-                                                                <th>Cancha</th>
+                                                                <th class="hide-xs">Cancha</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
                                                             <?php foreach ($partidos as $p): ?>
                                                                 <tr>
-                                                                    <td><?= $p['fecha_partido'] ? date('d/m/Y', strtotime($p['fecha_partido'])) : '-' ?></td>
-                                                                    <td><?= $p['hora_partido'] ? date('H:i', strtotime($p['hora_partido'])) : '-' ?></td>
+                                                                    <td class="hide-xs"><?= $p['fecha_partido'] ? date('d/m/Y', strtotime($p['fecha_partido'])) : '-' ?></td>
+                                                                    <td class="d-none-mobile"><?= $p['hora_partido'] ? date('H:i', strtotime($p['hora_partido'])) : '-' ?></td>
                                                                     <td>
                                                                         <div class="d-flex align-items-center">
                                                                             <?php if (!empty($p['logo_local'])): ?>
@@ -637,7 +715,7 @@ if (!empty($categoria_ids)) {
                                                                                     <?= substr($p['equipo_local'], 0, 1) ?>
                                                                                 </div>
                                                                             <?php endif; ?>
-                                                                            <span class="fw-medium"><?= htmlspecialchars($p['equipo_local']) ?></span>
+                                                                            <span class="fw-medium" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= htmlspecialchars($p['equipo_local']) ?></span>
                                                                         </div>
                                                                     </td>
                                                                     <td class="text-center text-muted">vs</td>
@@ -651,10 +729,10 @@ if (!empty($categoria_ids)) {
                                                                                     <?= substr($p['equipo_visitante'], 0, 1) ?>
                                                                                 </div>
                                                                             <?php endif; ?>
-                                                                            <span class="fw-medium"><?= htmlspecialchars($p['equipo_visitante']) ?></span>
+                                                                            <span class="fw-medium" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= htmlspecialchars($p['equipo_visitante']) ?></span>
                                                                         </div>
                                                                     </td>
-                                                                    <td class="text-muted"><?= htmlspecialchars($p['cancha'] ?? 'Por confirmar') ?></td>
+                                                                    <td class="text-muted hide-xs"><?= htmlspecialchars($p['cancha'] ?? 'Por confirmar') ?></td>
                                                                 </tr>
                                                             <?php endforeach; ?>
                                                         </tbody>
@@ -679,25 +757,25 @@ if (!empty($categoria_ids)) {
                             <div class="card-body">
                                 <div class="table-responsive">
                                     <table class="table table-striped">
-                                        <thead>
-                                            <tr>
-                                                <th>Fecha</th>
-                                                <th>Hora</th>
-                                                <th>Local</th>
-                                                <th></th>
-                                                <th>Visitante</th>
-                                                <th>Cancha</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
+                                                        <thead>
+                                                            <tr>
+                                                                <th class="hide-xs">Fecha</th>
+                                                                <th class="d-none-mobile">Hora</th>
+                                                                <th>Local</th>
+                                                                <th></th>
+                                                                <th>Visitante</th>
+                                                                <th class="hide-xs">Cancha</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
                                             <?php foreach ($fixture as $p): ?>
                                                 <tr>
-                                                    <td><?= $p['fecha_partido'] ? date('d/m/Y', strtotime($p['fecha_partido'])) : '-' ?></td>
-                                                    <td><?= $p['hora_partido'] ? date('H:i', strtotime($p['hora_partido'])) : '-' ?></td>
-                                                    <td class="fw-medium"><?= htmlspecialchars($p['equipo_local']) ?></td>
+                                                    <td class="hide-xs"><?= $p['fecha_partido'] ? date('d/m/Y', strtotime($p['fecha_partido'])) : '-' ?></td>
+                                                    <td class="d-none-mobile"><?= $p['hora_partido'] ? date('H:i', strtotime($p['hora_partido'])) : '-' ?></td>
+                                                    <td class="fw-medium" style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= htmlspecialchars($p['equipo_local']) ?></td>
                                                     <td class="text-center text-muted">vs</td>
-                                                    <td class="fw-medium"><?= htmlspecialchars($p['equipo_visitante']) ?></td>
-                                                    <td class="text-muted"><?= htmlspecialchars($p['cancha'] ?? 'Por confirmar') ?></td>
+                                                    <td class="fw-medium" style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= htmlspecialchars($p['equipo_visitante']) ?></td>
+                                                    <td class="text-muted hide-xs"><?= htmlspecialchars($p['cancha'] ?? 'Por confirmar') ?></td>
                                                 </tr>
                                             <?php endforeach; ?>
                                         </tbody>
@@ -720,29 +798,29 @@ if (!empty($categoria_ids)) {
                         <div class="card-body">
                             <div class="table-responsive">
                                 <table class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>Fecha</th>
-                                            <th>Local</th>
-                                            <th></th>
-                                            <th>Visitante</th>
-                                            <th>Resultado</th>
-                                            <th>Cancha</th>
-                                        </tr>
-                                    </thead>
+                                                        <thead>
+                                                            <tr>
+                                                                <th class="hide-xs">Fecha</th>
+                                                                <th>Local</th>
+                                                                <th></th>
+                                                                <th>Visitante</th>
+                                                                <th>Resultado</th>
+                                                                <th class="hide-xs">Cancha</th>
+                                                            </tr>
+                                                        </thead>
                                     <tbody>
                                         <?php foreach ($resultados as $p): ?>
                                             <tr>
-                                                <td class="text-muted"><?= htmlspecialchars($p['fecha_partido'] ?? '-') ?></td>
-                                                <td class="fw-medium"><?= htmlspecialchars($p['equipo_local']) ?></td>
+                                                <td class="text-muted hide-xs"><?= htmlspecialchars($p['fecha_partido'] ?? '-') ?></td>
+                                                <td class="fw-medium" style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= htmlspecialchars($p['equipo_local']) ?></td>
                                                 <td class="text-center text-muted">vs</td>
-                                                <td class="fw-medium"><?= htmlspecialchars($p['equipo_visitante']) ?></td>
+                                                <td class="fw-medium" style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= htmlspecialchars($p['equipo_visitante']) ?></td>
                                                 <td>
-                                                    <span class="badge bg-primary fs-6">
+                                                    <span class="badge bg-primary">
                                                         <strong><?= (int)$p['goles_local'] ?> - <?= (int)$p['goles_visitante'] ?></strong>
                                                     </span>
                                                 </td>
-                                                <td class="text-muted"><?= htmlspecialchars($p['cancha'] ?? '-') ?></td>
+                                                <td class="text-muted hide-xs"><?= htmlspecialchars($p['cancha'] ?? '-') ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
@@ -764,13 +842,13 @@ if (!empty($categoria_ids)) {
                         <div class="card-body">
                             <div class="table-responsive">
                                 <table class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>Jugador</th>
-                                            <th>Equipo</th>
-                                            <th>Goles</th>
-                                        </tr>
-                                    </thead>
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Jugador</th>
+                                                                <th class="d-none-mobile">Equipo</th>
+                                                                <th>Goles</th>
+                                                            </tr>
+                                                        </thead>
                                     <tbody>
                                         <?php 
                                         $pos = 1;
@@ -784,10 +862,11 @@ if (!empty($categoria_ids)) {
                                                         </span>
                                                         <span class="fw-medium"><?= htmlspecialchars($g['apellido_nombre']) ?></span>
                                                     </div>
+                                                    <small class="text-muted d-md-none"><?= htmlspecialchars($g['equipo']) ?></small>
                                                 </td>
-                                                <td class="text-muted"><?= htmlspecialchars($g['equipo']) ?></td>
+                                                <td class="text-muted d-none-mobile"><?= htmlspecialchars($g['equipo']) ?></td>
                                                 <td>
-                                                    <span class="badge bg-success fs-6">
+                                                    <span class="badge bg-success">
                                                         <i class="fas fa-futbol me-1"></i>
                                                         <strong><?= (int)$g['goles'] ?></strong>
                                                     </span>
@@ -813,29 +892,32 @@ if (!empty($categoria_ids)) {
                         <div class="card-body">
                             <div class="table-responsive">
                                 <table class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>Fecha</th>
-                                            <th>Jugador</th>
-                                            <th>Equipo</th>
-                                            <th>Tipo</th>
-                                            <th>Partidos</th>
-                                            <th>Cumplidos</th>
-                                        </tr>
-                                    </thead>
+                                                        <thead>
+                                                            <tr>
+                                                                <th class="hide-xs">Fecha</th>
+                                                                <th>Jugador</th>
+                                                                <th class="d-none-mobile">Equipo</th>
+                                                                <th>Tipo</th>
+                                                                <th>Partidos</th>
+                                                                <th class="hide-xs">Cumplidos</th>
+                                                            </tr>
+                                                        </thead>
                                     <tbody>
                                         <?php foreach ($sanciones as $s): ?>
                                             <tr>
-                                                <td class="text-muted"><?= htmlspecialchars($s['fecha_sancion']) ?></td>
-                                                <td class="fw-medium"><?= htmlspecialchars($s['apellido_nombre']) ?></td>
-                                                <td class="text-muted"><?= htmlspecialchars($s['equipo']) ?></td>
+                                                <td class="text-muted hide-xs"><?= htmlspecialchars($s['fecha_sancion']) ?></td>
+                                                <td class="fw-medium">
+                                                    <?= htmlspecialchars($s['apellido_nombre']) ?>
+                                                    <br><small class="text-muted d-md-none"><?= htmlspecialchars($s['equipo']) ?></small>
+                                                </td>
+                                                <td class="text-muted d-none-mobile"><?= htmlspecialchars($s['equipo']) ?></td>
                                                 <td>
                                                     <span class="badge bg-<?= strpos($s['tipo'], 'roja') !== false ? 'danger' : 'warning' ?>">
                                                         <?= htmlspecialchars($s['tipo']) ?>
                                                     </span>
                                                 </td>
                                                 <td><strong><?= (int)$s['partidos_suspension'] ?></strong></td>
-                                                <td class="text-muted"><?= (int)$s['partidos_cumplidos'] ?></td>
+                                                <td class="text-muted hide-xs"><?= (int)$s['partidos_cumplidos'] ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
@@ -891,24 +973,24 @@ if (!empty($categoria_ids)) {
                         <div class="card-body">
                             <div class="table-responsive">
                                 <table class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>Equipo</th>
-                                            <th>Rojas</th>
-                                            <th>Amarillas</th>
-                                            <th>Fairplay</th>
-                                        </tr>
-                                    </thead>
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Equipo</th>
+                                                                <th class="hide-xs">Rojas</th>
+                                                                <th class="hide-xs">Amarillas</th>
+                                                                <th>Fairplay</th>
+                                                            </tr>
+                                                        </thead>
                                     <tbody>
                                         <?php foreach ($fairplay as $f): ?>
                                             <tr>
-                                                <td class="fw-medium"><?= htmlspecialchars($f['equipo']) ?></td>
-                                                <td>
+                                                <td class="fw-medium" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= htmlspecialchars($f['equipo']) ?></td>
+                                                <td class="hide-xs">
                                                     <span class="badge bg-danger">
                                                         <i class="fas fa-square me-1"></i><?= (int)$f['rojas'] ?>
                                                     </span>
                                                 </td>
-                                                <td>
+                                                <td class="hide-xs">
                                                     <span class="badge bg-warning">
                                                         <i class="fas fa-square me-1"></i><?= (int)$f['amarillas'] ?>
                                                     </span>

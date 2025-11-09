@@ -350,6 +350,113 @@ if (!empty($_GET['ajax'])) {
         .match-body {
             padding: 1rem;
         }
+        
+        /* Estilos móviles */
+        @media (max-width: 768px) {
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            h2, h3 {
+                font-size: 1.5rem;
+            }
+            
+            .match-card {
+                margin-bottom: 0.75rem;
+            }
+            
+            .team-logo, .logo-placeholder {
+                width: 24px;
+                height: 24px;
+                font-size: 12px;
+            }
+            
+            .score-display {
+                font-size: 1.2rem;
+            }
+            
+            .match-timer {
+                font-size: 0.8rem;
+            }
+            
+            .match-header {
+                padding: 0.5rem 0.75rem;
+                font-size: 0.85rem;
+            }
+            
+            .match-body {
+                padding: 0.75rem;
+            }
+            
+            .event-badge {
+                font-size: 0.75rem;
+                padding: 2px 4px;
+                margin: 1px 2px;
+            }
+            
+            .col-lg-6, .col-xl-4 {
+                padding-left: 5px;
+                padding-right: 5px;
+                margin-bottom: 10px;
+            }
+            
+            .stats-card {
+                padding: 0.75rem;
+            }
+            
+            .stats-icon {
+                font-size: 1.2rem;
+            }
+            
+            .table-responsive {
+                font-size: 0.8rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.5rem 0.3rem;
+                font-size: 0.8rem;
+            }
+            
+            .table th.d-none-mobile,
+            .table td.d-none-mobile {
+                display: none;
+            }
+            
+            .d-flex.justify-content-between {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            h2, h3 {
+                font-size: 1.25rem;
+            }
+            
+            .team-logo, .logo-placeholder {
+                width: 20px;
+                height: 20px;
+                font-size: 10px;
+            }
+            
+            .score-display {
+                font-size: 1rem;
+            }
+            
+            .event-badge {
+                font-size: 0.7rem;
+            }
+            
+            .col-md-3 {
+                margin-bottom: 0.75rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.4rem 0.2rem;
+                font-size: 0.75rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -515,16 +622,20 @@ if (!empty($_GET['ajax'])) {
                                                             // Calcular tiempo igual que en partido_live.php
                                                             $segundosTotales = (int)($partido['segundos_transcurridos'] ?? 0);
                                                             $tiempoActual = $partido['tiempo_actual'] ?? '';
+                                                            $minutoPeriodo = (int)($partido['minuto_periodo'] ?? 0);
                                                             
-                                                            // Determinar segundos de inicio del período actual
-                                                            // En segundo_tiempo, siempre se resta 1800 segundos (30 min del 1°T)
-                                                            $segundosInicioPeriodo = 0;
-                                                            if ($tiempoActual === 'segundo_tiempo') {
-                                                                $segundosInicioPeriodo = 1800; // El primer tiempo siempre dura 30 minutos
+                                                            // Calcular tiempo transcurrido en el período actual
+                                                            if ($tiempoActual === 'primer_tiempo') {
+                                                                $transcurrido = $segundosTotales;
+                                                            } else if ($tiempoActual === 'segundo_tiempo') {
+                                                                // El servidor calcula minuto_periodo como: min(30, floor((segundos - 1800) / 60))
+                                                                // Esto asume que el primer tiempo duró 1800 segundos
+                                                                // Para ser consistente, usamos la misma lógica:
+                                                                $transcurrido = max(0, $segundosTotales - 1800);
+                                                            } else {
+                                                                $transcurrido = 0;
                                                             }
                                                             
-                                                            // Calcular tiempo transcurrido en el período actual (debe arrancar desde 0 en el 2°T)
-                                                            $transcurrido = max(0, $segundosTotales - $segundosInicioPeriodo);
                                                             $mins = floor($transcurrido / 60);
                                                             $secs = $transcurrido % 60;
                                                             
@@ -615,8 +726,8 @@ if (!empty($_GET['ajax'])) {
                                                     <tr>
                                                         <th>Partido</th>
                                                         <th class="text-center">Resultado</th>
-                                                        <th class="text-center">Fecha</th>
-                                                        <th class="text-center">Categoría</th>
+                                                        <th class="text-center d-none-mobile">Fecha</th>
+                                                        <th class="text-center hide-xs">Categoría</th>
                                                         <th class="text-center">Acciones</th>
                                                     </tr>
                                                 </thead>
@@ -643,16 +754,16 @@ if (!empty($_GET['ajax'])) {
                                                         <td class="text-center">
                                                             <span class="badge bg-success"><?= $r['goles_local'] ?> - <?= $r['goles_visitante'] ?></span>
                                                         </td>
-                                                        <td class="text-center">
+                                                        <td class="text-center d-none-mobile">
                                                             <?= date('d/m/Y', strtotime($r['fecha_partido'])) ?><br>
                                                             <small class="text-muted">Fecha <?= $r['numero_fecha'] ?></small>
                                                         </td>
-                                                        <td class="text-center">
+                                                        <td class="text-center hide-xs">
                                                             <span class="badge bg-secondary"><?= htmlspecialchars($r['categoria']) ?></span>
                                                         </td>
                                                         <td class="text-center">
                                                             <button class="btn btn-sm btn-outline-primary" onclick="mostrarModalEventos(<?= $r['id'] ?>)">
-                                                                <i class="fas fa-list"></i> Ver Eventos
+                                                                <i class="fas fa-list"></i> <span class="d-none d-sm-inline">Ver Eventos</span>
                                                             </button>
                                                         </td>
                                                     </tr>
@@ -823,16 +934,19 @@ if (!empty($_GET['ajax'])) {
                         } else {
                             const segundosTotales = parseInt(p.segundos_transcurridos) || 0;
                             const tiempoActual = p.tiempo_actual || '';
+                            const minutoPeriodo = parseInt(p.minuto_periodo) || 0;
                             
-                            // Determinar segundos de inicio del período actual
-                            // En segundo_tiempo, siempre se resta 1800 segundos (30 min del 1°T)
-                            let segundosInicioPeriodo = 0;
-                            if (tiempoActual === 'segundo_tiempo') {
-                                segundosInicioPeriodo = 1800; // El primer tiempo siempre dura 30 minutos
+                            // Calcular tiempo transcurrido en el período actual
+                            let transcurrido = 0;
+                            if (tiempoActual === 'primer_tiempo') {
+                                transcurrido = segundosTotales;
+                            } else if (tiempoActual === 'segundo_tiempo') {
+                                // El servidor calcula minuto_periodo como: min(30, floor((segundos - 1800) / 60))
+                                // Esto asume que el primer tiempo duró 1800 segundos
+                                // Para ser consistente, usamos la misma lógica:
+                                transcurrido = Math.max(0, segundosTotales - 1800);
                             }
                             
-                            // Calcular tiempo transcurrido en el período actual (debe arrancar desde 0 en el 2°T)
-                            const transcurrido = Math.max(0, segundosTotales - segundosInicioPeriodo);
                             const mins = Math.floor(transcurrido / 60);
                             const secs = transcurrido % 60;
                             
@@ -975,16 +1089,19 @@ if (!empty($_GET['ajax'])) {
                                 // Calcular tiempo igual que en partido_live.php
                                 const segundosTotales = parseInt(partido.segundos_transcurridos) || 0;
                                 const tiempoActual = partido.tiempo_actual || '';
+                                const minutoPeriodo = parseInt(partido.minuto_periodo) || 0;
                                 
-                                // Determinar segundos de inicio del período actual
-                                // En segundo_tiempo, siempre se resta 1800 segundos (30 min del 1°T)
-                                let segundosInicioPeriodo = 0;
-                                if (tiempoActual === 'segundo_tiempo') {
-                                    segundosInicioPeriodo = 1800; // El primer tiempo siempre dura 30 minutos
+                                // Calcular tiempo transcurrido en el período actual
+                                let transcurrido = 0;
+                                if (tiempoActual === 'primer_tiempo') {
+                                    transcurrido = segundosTotales;
+                                } else if (tiempoActual === 'segundo_tiempo') {
+                                    // El servidor calcula minuto_periodo como: min(30, floor((segundos - 1800) / 60))
+                                    // Esto asume que el primer tiempo duró 1800 segundos
+                                    // Para ser consistente, usamos la misma lógica:
+                                    transcurrido = Math.max(0, segundosTotales - 1800);
                                 }
                                 
-                                // Calcular tiempo transcurrido en el período actual (debe arrancar desde 0 en el 2°T)
-                                const transcurrido = Math.max(0, segundosTotales - segundosInicioPeriodo);
                                 const mins = Math.floor(transcurrido / 60);
                                 const secs = transcurrido % 60;
                                 

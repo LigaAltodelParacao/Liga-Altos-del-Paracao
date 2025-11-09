@@ -110,6 +110,26 @@ if (($dest['partidos'] + $dest['goles'] + $dest['amarillas'] + $dest['rojas']) =
 .chips a{text-decoration:none}
 .timeline-item{position:relative;padding-left:1.25rem;border-left:2px solid #e9ecef;margin-bottom:1rem}
 .timeline-marker{position:absolute;left:-7px;top:0;width:14px;height:14px;border-radius:50%;background:#198754;border:3px solid #fff;box-shadow:0 0 0 3px #e9ecef}
+@media (max-width: 768px) {
+.container-fluid{padding:0.5rem}
+.container{padding-left:10px;padding-right:10px}
+h1,h5{font-size:1.5rem}
+.stat-card{padding:1rem}
+.stat-number{font-size:2rem}
+.col-md-2{margin-bottom:0.75rem}
+.timeline-item{padding-left:1.5rem}
+.col-md-1,.col-md-5,.col-md-2,.col-md-4{margin-bottom:0.5rem}
+.card-body{padding:1rem}
+img,.rounded-circle{width:60px!important;height:60px!important}
+.col-3 img{width:50px!important;height:50px!important}
+}
+@media (max-width: 576px) {
+h1,h5{font-size:1.25rem}
+.stat-number{font-size:1.5rem}
+.timeline-item{padding-left:1.25rem;padding-bottom:1rem}
+img,.rounded-circle{width:50px!important;height:50px!important}
+.col-3 img{width:40px!important;height:40px!important}
+}
 </style>
 </head>
 <body>

@@ -523,17 +523,93 @@ $campeonatos = $db->query($query_campeonatos)->fetchAll();
         }
 
         @media (max-width: 768px) {
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            h1, h2 {
+                font-size: 1.5rem;
+            }
+            
             .stat-value {
-                font-size: 1.8rem;
+                font-size: 1.5rem;
             }
             .stat-icon {
-                font-size: 2rem;
+                font-size: 1.5rem;
             }
             .record-match {
                 flex-direction: column;
             }
             .record-score {
                 padding: 15px 0;
+            }
+            
+            .stats-container {
+                padding: 15px;
+            }
+            
+            .stat-card {
+                padding: 15px;
+            }
+            
+            .team-logo {
+                width: 35px;
+                height: 35px;
+            }
+            
+            .top-goleador-item {
+                padding: 10px;
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+            
+            .medal-icon {
+                font-size: 1.5rem;
+                margin-right: 10px;
+            }
+            
+            .col-md-12 {
+                margin-bottom: 0.75rem;
+            }
+            
+            .filter-section {
+                padding: 15px;
+            }
+            
+            .page-header {
+                padding: 20px;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            h1, h2 {
+                font-size: 1.25rem;
+            }
+            
+            .stat-value {
+                font-size: 1.25rem;
+            }
+            
+            .stat-icon {
+                font-size: 1.25rem;
+            }
+            
+            .team-logo {
+                width: 30px;
+                height: 30px;
+            }
+            
+            .top-goleador-item {
+                padding: 8px;
+            }
+            
+            .stats-container {
+                padding: 10px;
+            }
+            
+            .stat-card {
+                padding: 10px;
             }
         }
     </style>

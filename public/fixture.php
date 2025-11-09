@@ -268,6 +268,93 @@ if (!$es_torneo_zonas && empty($categoria_id) && $nocturno && !empty($nocturno_c
             background: #d4edda;
             font-weight: bold;
         }
+        
+        /* Estilos móviles */
+        @media (max-width: 768px) {
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            h2 {
+                font-size: 1.5rem;
+            }
+            
+            .fixture-match {
+                padding: 8px;
+                margin-bottom: 10px;
+            }
+            
+            .fixture-team {
+                font-size: 0.85rem;
+            }
+            
+            .fixture-team img {
+                width: 24px;
+                height: 24px;
+            }
+            
+            .fixture-result {
+                font-size: 1rem;
+            }
+            
+            .col-md-6, .col-lg-4, .col-xl-4 {
+                margin-bottom: 10px;
+            }
+            
+            .card-body {
+                padding: 1rem;
+            }
+            
+            .nav-tabs {
+                font-size: 0.85rem;
+                overflow-x: auto;
+                flex-wrap: nowrap;
+            }
+            
+            .nav-tabs .nav-link {
+                padding: 0.5rem 0.75rem;
+                white-space: nowrap;
+            }
+            
+            .eliminatoria-match {
+                padding: 8px;
+                font-size: 0.85rem;
+            }
+            
+            .table-responsive {
+                font-size: 0.8rem;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            h2 {
+                font-size: 1.25rem;
+            }
+            
+            .fixture-team {
+                font-size: 0.8rem;
+            }
+            
+            .fixture-team img {
+                width: 20px;
+                height: 20px;
+            }
+            
+            .fixture-result {
+                font-size: 0.9rem;
+            }
+            
+            .col-lg-6, .col-md-6, .col-lg-4 {
+                padding-left: 5px;
+                padding-right: 5px;
+            }
+            
+            .d-flex.justify-content-between {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+        }
     </style>
 </head>
 <body>

@@ -194,6 +194,81 @@ if (!empty($where_conditions)) {
             font-size: 1.8rem;
             margin-bottom: 10px;
         }
+        
+        /* Estilos móviles */
+        @media (max-width: 768px) {
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            h2 {
+                font-size: 1.5rem;
+            }
+            
+            .table-responsive {
+                font-size: 0.8rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.5rem 0.3rem;
+                font-size: 0.8rem;
+            }
+            
+            .table th.d-none-mobile,
+            .table td.d-none-mobile {
+                display: none;
+            }
+            
+            .table img {
+                width: 24px !important;
+                height: 24px !important;
+            }
+            
+            .col-md-2 {
+                margin-bottom: 0.5rem;
+            }
+            
+            .card {
+                margin-bottom: 1rem;
+            }
+            
+            .card-body {
+                padding: 1rem;
+            }
+            
+            .stats-card {
+                padding: 0.75rem;
+            }
+            
+            h3 {
+                font-size: 1.5rem;
+            }
+            
+            .d-flex.justify-content-between {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            h2 {
+                font-size: 1.25rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.4rem 0.2rem;
+                font-size: 0.75rem;
+            }
+            
+            .col-md-2 {
+                margin-bottom: 0.75rem;
+            }
+            
+            h3 {
+                font-size: 1.25rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -329,20 +404,21 @@ if (!empty($where_conditions)) {
                             <thead class="table-dark">
                                 <tr>
                                     <th>Jugador</th>
-                                    <th>Equipo</th>
+                                    <th class="d-none-mobile">Equipo</th>
                                     <th>Tipo</th>
                                     <th>Fechas</th>
-                                    <th>Estado</th>
-                                    <th>Fecha Sanción</th>
+                                    <th class="hide-xs">Estado</th>
+                                    <th class="d-none-mobile">Fecha Sanción</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach($sanciones as $s): ?>
                                     <tr class="<?= $s['activa'] ? 'table-danger' : 'table-success' ?>">
                                         <td>
-                                            <strong><?= htmlspecialchars($s['apellido_nombre']) ?></strong><br>                                                    
+                                            <strong><?= htmlspecialchars($s['apellido_nombre']) ?></strong><br>
+                                            <small class="text-muted d-md-none"><?= htmlspecialchars($s['equipo']) ?></small>
                                         </td>
-                                        <td>
+                                        <td class="d-none-mobile">
                                             <div class="d-flex align-items-center">
                                                 <?php if(!empty($s['equipo_logo'])): ?>
                                                     <img src="../uploads/<?= htmlspecialchars($s['equipo_logo']) ?>" 
@@ -379,15 +455,20 @@ if (!empty($where_conditions)) {
                                             <?php else: ?>
                                                 <small class="text-success">✓ Cumplida</small>
                                             <?php endif; ?>
+                                            <?php if($s['activa']): ?>
+                                                <br><span class="badge bg-danger d-md-none">🔴 Activa</span>
+                                            <?php else: ?>
+                                                <br><span class="badge bg-success d-md-none">✓ Cumplida</span>
+                                            <?php endif; ?>
                                         </td>
-                                        <td>
+                                        <td class="hide-xs">
                                             <?php if($s['activa']): ?>
                                                 <span class="badge bg-danger">🔴 Activa</span>
                                             <?php else: ?>
                                                 <span class="badge bg-success">✓ Cumplida</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td><?= date('d/m/Y', strtotime($s['fecha_sancion'])) ?></td>
+                                        <td class="d-none-mobile"><?= date('d/m/Y', strtotime($s['fecha_sancion'])) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>

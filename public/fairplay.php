@@ -244,6 +244,92 @@ if ($categoria_id && !empty($fairplay)) {
             vertical-align: middle;
             font-size: 0.9rem;
         }
+        
+        /* Estilos móviles */
+        @media (max-width: 768px) {
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            h2 {
+                font-size: 1.5rem;
+            }
+            
+            .tabla-fairplay {
+                font-size: 0.8rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.5rem 0.3rem;
+                font-size: 0.8rem;
+            }
+            
+            .table th.d-none-mobile,
+            .table td.d-none-mobile {
+                display: none;
+            }
+            
+            .table th.hide-xs,
+            .table td.hide-xs {
+                display: none;
+            }
+            
+            .table img {
+                width: 25px !important;
+                height: 25px !important;
+            }
+            
+            .fairplay-badge {
+                width: 35px;
+                height: 35px;
+                font-size: 1rem;
+            }
+            
+            .podio-card {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+            
+            .col-md-3, .col-md-4, .col-6 {
+                margin-bottom: 0.75rem;
+            }
+            
+            .stats-card {
+                padding: 0.75rem;
+            }
+            
+            .card-amarilla, .card-roja, .card-roja-doble, .card-roja-directa {
+                width: 16px;
+                height: 22px;
+            }
+            
+            .d-flex.justify-content-between {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            h2 {
+                font-size: 1.25rem;
+            }
+            
+            .tabla-fairplay {
+                font-size: 0.75rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.4rem 0.2rem;
+                font-size: 0.75rem;
+            }
+            
+            .fairplay-badge {
+                width: 30px;
+                height: 30px;
+                font-size: 0.9rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -418,16 +504,16 @@ if ($categoria_id && !empty($fairplay)) {
                             <tr>
                                 <th class="text-center" style="width: 8%;">Pos</th>
                                 <th style="width: 30%;">Equipo</th>
-                                <th class="text-center" style="width: 8%;">PJ</th>
-                                <th class="text-center" style="width: 10%;">
+                                <th class="text-center d-none-mobile" style="width: 8%;">PJ</th>
+                                <th class="text-center hide-xs" style="width: 10%;">
                                     <span class="card-amarilla"></span><br>
 									<small>Amarilla</small>
                                 </th>
-                                <th class="text-center" style="width: 12%;">
+                                <th class="text-center hide-xs" style="width: 12%;">
                                     <span class="card-roja-doble"></span><br>
                                     <small>Doble Amarilla</small>
                                 </th>
-                                <th class="text-center" style="width: 12%;">
+                                <th class="text-center hide-xs" style="width: 12%;">
                                     <span class="card-roja-directa"></span><br>
                                     <small>Directa</small>
                                 </th>
@@ -478,20 +564,20 @@ if ($categoria_id && !empty($fairplay)) {
                                         <?php endif; ?>
                                     </div>
                                 </td>
-                                <td class="text-center">
+                                <td class="text-center d-none-mobile">
                                     <span class="badge bg-secondary"><?= $f['partidos_jugados'] ?></span>
                                 </td>
-                                <td class="text-center">
+                                <td class="text-center hide-xs">
                                     <span class="badge bg-warning text-dark">
                                         <?= $f['amarillas'] ?>
                                     </span>
                                 </td>
-                                <td class="text-center">
+                                <td class="text-center hide-xs">
                                     <span class="badge" style="background-color: #FF6B6B;">
                                         <?= $f['rojas_doble'] ?>
                                     </span>
                                 </td>
-                                <td class="text-center">
+                                <td class="text-center hide-xs">
                                     <span class="badge" style="background-color: #8B0000;">
                                         <?= $f['rojas_directa'] ?>
                                     </span>

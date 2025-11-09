@@ -131,7 +131,94 @@ if ($categoria_id) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="assets/css/style.css" rel="stylesheet">
-    
+    <style>
+        /* Estilos móviles */
+        @media (max-width: 768px) {
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            h2 {
+                font-size: 1.5rem;
+            }
+            
+            .table-responsive {
+                font-size: 0.8rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.5rem 0.3rem;
+                font-size: 0.8rem;
+            }
+            
+            .table img {
+                width: 30px !important;
+                height: 30px !important;
+            }
+            
+            .card {
+                margin-bottom: 1rem;
+            }
+            
+            .card-header {
+                padding: 0.75rem;
+                font-size: 0.9rem;
+            }
+            
+            .stats-card {
+                padding: 0.75rem;
+            }
+            
+            .col-md-2, .col-md-4 {
+                margin-bottom: 0.5rem;
+            }
+            
+            .badge {
+                font-size: 0.7rem;
+                padding: 0.25rem 0.5rem;
+            }
+            
+            h3, h4, h5 {
+                font-size: 1rem;
+            }
+            
+            .top-goleador-card img {
+                width: 60px !important;
+                height: 60px !important;
+            }
+            
+            .d-flex.justify-content-between {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            h2 {
+                font-size: 1.25rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.4rem 0.2rem;
+                font-size: 0.75rem;
+            }
+            
+            .table img {
+                width: 24px !important;
+                height: 24px !important;
+            }
+            
+            .top-goleador-card img {
+                width: 50px !important;
+                height: 50px !important;
+            }
+            
+            .card-body {
+                padding: 1rem;
+            }
+        }
+    </style>
 </head>
 <body>
     <!-- Header -->

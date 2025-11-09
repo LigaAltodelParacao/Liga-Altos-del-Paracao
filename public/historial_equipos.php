@@ -315,6 +315,273 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 'eventos' && isset($_GET['partido_i
     justify-content: center;
 }
 .eventos { display: none; }
+
+/* Estilos móviles */
+@media (max-width: 768px) {
+    .container {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+    
+    h2, h5, h6 {
+        font-size: 1.5rem;
+    }
+    
+    .tabla-jugadores {
+        font-size: 0.7rem;
+    }
+    
+    .tabla-jugadores td, .tabla-jugadores th {
+        padding: 0.3rem 0.25rem;
+        font-size: 0.7rem;
+    }
+    
+    .table-responsive {
+        font-size: 0.8rem;
+    }
+    
+    .table th, .table td {
+        padding: 0.5rem 0.3rem;
+        font-size: 0.8rem;
+    }
+    
+    .table th.d-none-mobile,
+    .table td.d-none-mobile {
+        display: none;
+    }
+    
+    .table img {
+        width: 20px !important;
+        height: 20px !important;
+    }
+    
+    .equipo-logo-container {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .col-md-6 {
+        margin-bottom: 1rem;
+    }
+    
+    .col-lg-3, .col-md-4, .col-sm-6 {
+        margin-bottom: 0.75rem;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .badge {
+        font-size: 0.65rem;
+        padding: 0.15em 0.3em;
+    }
+    
+    .modal-xl {
+        max-width: 95%;
+    }
+    
+    /* Estilos para el modal del historial del jugador en móviles */
+    .modal-dialog {
+        margin: 0.5rem;
+    }
+    
+    .modal-content {
+        font-size: 0.9rem;
+    }
+    
+    .modal-header {
+        padding: 0.75rem;
+    }
+    
+    .modal-title {
+        font-size: 1rem;
+    }
+    
+    .modal-body {
+        padding: 0.75rem;
+    }
+    
+    .modal-body .col-12.col-md-7,
+    .modal-body .col-12.col-md-5 {
+        margin-bottom: 1rem;
+    }
+    
+    .modal-body .row {
+        margin-left: 0;
+        margin-right: 0;
+    }
+    
+    .modal-body .card {
+        margin-bottom: 0.75rem;
+    }
+    
+    .modal-body .card-body {
+        padding: 0.75rem;
+    }
+    
+    .modal-body h4 {
+        font-size: 1.25rem;
+    }
+    
+    .modal-body h5 {
+        font-size: 1.1rem;
+    }
+    
+    .modal-body h6 {
+        font-size: 1rem;
+    }
+    
+    .modal-body .col-3 {
+        margin-bottom: 0.5rem;
+    }
+    
+    .modal-body .list-group-item {
+        padding: 0.5rem;
+        font-size: 0.85rem;
+    }
+    
+    .modal-footer {
+        padding: 0.75rem;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .modal-footer .btn {
+        width: 100%;
+    }
+    
+    #fotoJugadorContainer img,
+    #fotoJugadorContainer div {
+        width: 60px !important;
+        height: 60px !important;
+    }
+    
+    #fotoJugadorContainer .fa-user {
+        font-size: 1.5rem !important;
+    }
+}
+
+@media (max-width: 576px) {
+    h2, h5, h6 {
+        font-size: 1.25rem;
+    }
+    
+    .tabla-jugadores {
+        font-size: 0.65rem;
+    }
+    
+    .tabla-jugadores td, .tabla-jugadores th {
+        padding: 0.25rem 0.2rem;
+        font-size: 0.65rem;
+    }
+    
+    .table th, .table td {
+        padding: 0.4rem 0.2rem;
+        font-size: 0.75rem;
+    }
+    
+    .equipo-logo-container {
+        width: 50px;
+        height: 50px;
+    }
+    
+    /* Modal aún más compacto en pantallas muy pequeñas */
+    .modal-dialog {
+        margin: 0.25rem;
+    }
+    
+    .modal-content {
+        font-size: 0.85rem;
+    }
+    
+    .modal-header {
+        padding: 0.5rem;
+    }
+    
+    .modal-title {
+        font-size: 0.9rem;
+    }
+    
+    .modal-body {
+        padding: 0.5rem;
+    }
+    
+    .modal-body .card-body {
+        padding: 0.5rem;
+    }
+    
+    .modal-body h4 {
+        font-size: 1.1rem;
+    }
+    
+    .modal-body h5 {
+        font-size: 1rem;
+    }
+    
+    .modal-body h6 {
+        font-size: 0.9rem;
+    }
+    
+    .modal-body .col-3 {
+        padding: 0.25rem;
+    }
+    
+    .modal-body .card-body.py-2 {
+        padding: 0.5rem !important;
+    }
+    
+    .modal-body .card-body h4 {
+        font-size: 1rem;
+    }
+    
+    .modal-body .card-body small {
+        font-size: 0.7rem;
+    }
+    
+    .modal-body .list-group-item {
+        padding: 0.4rem;
+        font-size: 0.8rem;
+    }
+    
+    .modal-body .list-group-item h6 {
+        font-size: 0.85rem;
+    }
+    
+    .modal-body .list-group-item p {
+        font-size: 0.75rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .modal-body .list-group-item small {
+        font-size: 0.7rem;
+    }
+    
+    #fotoJugadorContainer img,
+    #fotoJugadorContainer div {
+        width: 50px !important;
+        height: 50px !important;
+    }
+    
+    #fotoJugadorContainer .fa-user {
+        font-size: 1.25rem !important;
+    }
+    
+    .modal-body .alert {
+        padding: 0.5rem;
+        font-size: 0.8rem;
+    }
+    
+    .modal-body ul {
+        padding-left: 1.25rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .modal-body li {
+        font-size: 0.75rem;
+        margin-bottom: 0.25rem;
+    }
+}
 </style>
 </head>
 <body>
@@ -437,7 +704,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 'eventos' && isset($_GET['partido_i
                         <table class="table table-hover table-sm mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Fecha</th>
+                                    <th class="hide-xs">Fecha</th>
                                     <th>Rival</th>
                                     <th>Resultado</th>
                                     <th></th>
@@ -496,9 +763,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 'eventos' && isset($_GET['partido_i
                         <table class="table table-hover table-sm mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Fecha</th>
+                                    <th class="hide-xs">Fecha</th>
                                     <th>Rival</th>
-                                    <th>Programado</th>
+                                    <th class="d-none-mobile">Programado</th>
                                     <th>Estado</th>
                                 </tr>
                             </thead>
@@ -509,15 +776,15 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 'eventos' && isset($_GET['partido_i
                                 $rival_logo = $es_local ? $p['visitante_logo'] : $p['local_logo'];
                                 ?>
                                 <tr>
-                                    <td><small><?php echo date('d/m', strtotime($p['fecha_partido'])); ?></small></td>
+                                    <td class="hide-xs"><small><?php echo date('d/m', strtotime($p['fecha_partido'])); ?></small></td>
                                     <td>
                                         <?php if($rival_logo && file_exists("../uploads/".$rival_logo)): ?>
-                                        <img src="../uploads/<?php echo htmlspecialchars($rival_logo);?>" width="25" height="25" class="me-1 rounded">
+                                            <img src="../uploads/<?php echo htmlspecialchars($rival_logo);?>" width="25" height="25" class="me-1 rounded">
                                         <?php endif; ?>
                                         <small><?php echo htmlspecialchars($rival);?></small>
                                         <br><small class="text-muted"><?= $es_local ? '(Local)' : '(Visit.)' ?></small>
                                     </td>
-                                    <td><small><?php echo date('d/m/Y H:i', strtotime($p['fecha_partido'])); ?></small></td>
+                                    <td class="d-none-mobile"><small><?php echo date('d/m/Y H:i', strtotime($p['fecha_partido'])); ?></small></td>
                                     <td>
                                         <span class="badge bg-<?= $p['estado']=='programado'?'primary':'warning' ?>">
                                             <?php echo ucfirst($p['estado']); ?>
@@ -547,11 +814,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 'eventos' && isset($_GET['partido_i
                             <thead class="table-light">
                                 <tr>
                                     <th>Jugador</th>
-                                    <th>Edad</th>
+                                    <th class="hide-xs">Edad</th>
                                     <th title="Partidos Jugados"><i class="fas fa-running"></i></th>
                                     <th title="Goles"><i class="fas fa-futbol"></i></th>
-                                    <th title="Amarillas"><i class="fas fa-square text-warning"></i></th>
-                                    <th title="Rojas"><i class="fas fa-square text-danger"></i></th>
+                                    <th class="hide-xs" title="Amarillas"><i class="fas fa-square text-warning"></i></th>
+                                    <th class="hide-xs" title="Rojas"><i class="fas fa-square text-danger"></i></th>
                                     <th>Estado</th>
                                 </tr>
                             </thead>
@@ -577,7 +844,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 'eventos' && isset($_GET['partido_i
                                         <i class="fas fa-exclamation-triangle text-warning" title="Próximo a sanción"></i>
                                         <?php endif; ?>
                                     </td>
-                                    <td><?php echo calculateAge($j['fecha_nacimiento']);?></td>
+                                    <td class="hide-xs"><?php echo calculateAge($j['fecha_nacimiento']);?></td>
                                     <td>
                                         <?php if($j['partidos_jugados'] > 0): ?>
                                         <span class="badge bg-info"><?php echo $j['partidos_jugados'];?></span>
@@ -592,14 +859,14 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 'eventos' && isset($_GET['partido_i
                                         <span class="text-muted">0</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td>
+                                    <td class="hide-xs">
                                         <?php if($j['amarillas_totales'] > 0): ?>
                                         <span class="badge bg-warning text-dark"><?php echo $j['amarillas_totales'];?></span>
                                         <?php else: ?>
                                         <span class="text-muted">0</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td>
+                                    <td class="hide-xs">
                                         <?php if($j['rojas'] > 0): ?>
                                         <span class="badge bg-danger"><?php echo $j['rojas'];?></span>
                                         <?php if ($tiene_doble_amarilla): ?>
@@ -671,7 +938,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 'eventos' && isset($_GET['partido_i
       </div>
       <div class="modal-body">
         <div class="row">
-          <div class="col-md-7">
+          <div class="col-12 col-md-7">
             <div class="text-center mb-3" id="fotoJugadorContainer">
                 <div class="bg-light border rounded-circle d-flex align-items-center justify-content-center mx-auto" style="width:80px;height:80px;">
                     <i class="fas fa-user fa-2x text-muted"></i>
@@ -680,7 +947,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 'eventos' && isset($_GET['partido_i
             <h5 class="text-center mb-3" id="nombreJugadorModal"></h5>
             <div id="historialCampeonato"></div>
           </div>
-          <div class="col-md-5">
+          <div class="col-12 col-md-5">
             <h6 class="mb-3"><i class="fas fa-history"></i> Equipos en los que jugó</h6>
             <div id="historialEquipos"></div>
           </div>
@@ -757,10 +1024,13 @@ function mostrarHistorialJugador(jugadorId, categoriaId) {
                 return;
             }
             const fotoDiv = document.getElementById('fotoJugadorContainer');
+            const isMobile = window.innerWidth <= 768;
+            const fotoSize = isMobile ? '60' : '80';
+            const fotoSizeStyle = isMobile ? 'width:60px;height:60px;' : 'width:80px;height:80px;';
             if (data.jugador.foto && data.jugador.foto.trim() !== '') {
-                fotoDiv.innerHTML = `<img src="../uploads/${data.jugador.foto}" width="80" height="80" class="rounded-circle border border-3 border-primary mx-auto d-block">`;
+                fotoDiv.innerHTML = `<img src="../uploads/${data.jugador.foto}" width="${fotoSize}" height="${fotoSize}" class="rounded-circle border border-3 border-primary mx-auto d-block">`;
             } else {
-                fotoDiv.innerHTML = `<div class="bg-light border border-3 border-primary rounded-circle d-flex align-items-center justify-content-center mx-auto" style="width:80px;height:80px;"><i class="fas fa-user fa-2x text-muted"></i></div>`;
+                fotoDiv.innerHTML = `<div class="bg-light border border-3 border-primary rounded-circle d-flex align-items-center justify-content-center mx-auto" style="${fotoSizeStyle}"><i class="fas fa-user ${isMobile ? 'fa-lg' : 'fa-2x'} text-muted"></i></div>`;
             }
             document.getElementById('nombreJugadorModal').innerText = data.jugador.apellido_nombre;
             // Link a perfil completo
@@ -768,16 +1038,17 @@ function mostrarHistorialJugador(jugadorId, categoriaId) {
             if (perfilBtn) {
                 perfilBtn.href = `jugador.php?id=${encodeURIComponent(jugadorId)}`;
             }
+            const colSize = isMobile ? 'col-6' : 'col-3';
             let htmlCampeonato = `
                 <div class="card mb-3">
                     <div class="card-body">
-                        <p class="mb-1"><strong><i class="fas fa-id-card"></i> DNI:</strong> ${data.jugador.dni}</p>
-                        <p class="mb-1"><strong><i class="fas fa-birthday-cake"></i> Edad:</strong> ${calculateAge(data.jugador.fecha_nacimiento)} años</p>
-                        <p class="mb-0"><strong><i class="fas fa-trophy"></i> Campeonato:</strong> ${data.campeonato_actual}</p>
+                        <p class="mb-1 small"><strong><i class="fas fa-id-card"></i> DNI:</strong> ${data.jugador.dni}</p>
+                        <p class="mb-1 small"><strong><i class="fas fa-birthday-cake"></i> Edad:</strong> ${calculateAge(data.jugador.fecha_nacimiento)} años</p>
+                        <p class="mb-0 small"><strong><i class="fas fa-trophy"></i> Campeonato:</strong> ${data.campeonato_actual}</p>
                     </div>
                 </div>
-                <div class="row text-center mb-3">
-                    <div class="col-3">
+                <div class="row text-center mb-3 g-2">
+                    <div class="${colSize}">
                         <div class="card bg-info text-white">
                             <div class="card-body py-2">
                                 <h4 class="mb-0">${data.partidos_jugados}</h4>
@@ -785,7 +1056,7 @@ function mostrarHistorialJugador(jugadorId, categoriaId) {
                             </div>
                         </div>
                     </div>
-                    <div class="col-3">
+                    <div class="${colSize}">
                         <div class="card bg-success text-white">
                             <div class="card-body py-2">
                                 <h4 class="mb-0">${data.goles.length}</h4>
@@ -793,7 +1064,7 @@ function mostrarHistorialJugador(jugadorId, categoriaId) {
                             </div>
                         </div>
                     </div>
-                    <div class="col-3">
+                    <div class="${colSize}">
                         <div class="card bg-warning text-dark">
                             <div class="card-body py-2">
                                 <h4 class="mb-0">${data.amarillas}</h4>
@@ -801,7 +1072,7 @@ function mostrarHistorialJugador(jugadorId, categoriaId) {
                             </div>
                         </div>
                     </div>
-                    <div class="col-3">
+                    <div class="${colSize}">
                         <div class="card bg-danger text-white">
                             <div class="card-body py-2">
                                 <h4 class="mb-0">${data.rojas}</h4>
@@ -814,34 +1085,34 @@ function mostrarHistorialJugador(jugadorId, categoriaId) {
             if (data.goles.length > 0) {
                 htmlCampeonato += `
                     <div class="card mb-3">
-                        <div class="card-header bg-success text-white">
+                        <div class="card-header bg-success text-white ${isMobile ? 'small' : ''}">
                             <strong><i class="fas fa-futbol"></i> Detalle de Goles (${data.goles.length})</strong>
                         </div>
                         <div class="card-body">
-                            <ul class="list-unstyled mb-0">`;
+                            <ul class="list-unstyled mb-0 ${isMobile ? 'small' : ''}">`;
                 data.goles.forEach(g => {
-                    htmlCampeonato += `<li class="mb-2">⚽ ${g.minuto > 0 ? g.minuto + "'" : 'Sin min.'} vs <strong>${g.rival}</strong></li>`;
+                    htmlCampeonato += `<li class="mb-1">⚽ ${g.minuto > 0 ? g.minuto + "'" : 'Sin min.'} vs <strong>${g.rival}</strong></li>`;
                 });
                 htmlCampeonato += `</ul></div></div>`;
             }
             if (data.sanciones_activas.length > 0) {
-                htmlCampeonato += `<div class="alert alert-danger"><strong><i class="fas fa-ban"></i> Sanciones activas:</strong><ul class="mb-0 mt-2">`;
+                htmlCampeonato += `<div class="alert alert-danger ${isMobile ? 'small' : ''}"><strong><i class="fas fa-ban"></i> Sanciones activas:</strong><ul class="mb-0 mt-2 ${isMobile ? 'small' : ''}">`;
                 data.sanciones_activas.forEach(s => {
                     let tipo = s.tipo === 'amarillas_acumuladas' ? '🟨 4 Amarillas' :
                                s.tipo === 'doble_amarilla' ? '🟨🟥 Doble Amarilla' :
                                s.tipo === 'roja_directa' ? '🟥 Roja Directa' : '📋 Administrativa';
                     let restantes = s.partidos_suspension - s.partidos_cumplidos;
-                    htmlCampeonato += `<li>${tipo} - ${s.partidos_cumplidos}/${s.partidos_suspension} fechas (<strong>${restantes} restante(s)</strong>)`;
+                    htmlCampeonato += `<li class="${isMobile ? 'small' : ''}">${tipo} - ${s.partidos_cumplidos}/${s.partidos_suspension} fechas (<strong>${restantes} restante(s)</strong>)`;
                     if(s.descripcion) htmlCampeonato += `<br><small>${s.descripcion}</small>`;
                     htmlCampeonato += `</li>`;
                 });
                 htmlCampeonato += `</ul></div>`;
             } else {
-                htmlCampeonato += `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Sin sanciones activas</div>`;
+                htmlCampeonato += `<div class="alert alert-success ${isMobile ? 'small' : ''}"><i class="fas fa-check-circle"></i> Sin sanciones activas</div>`;
             }
             document.getElementById('historialCampeonato').innerHTML = htmlCampeonato;
             if (data.equipos_historial.length > 0) {
-                let htmlEquipos = `<div class="list-group small">`;
+                let htmlEquipos = `<div class="list-group ${isMobile ? 'small' : ''}">`;
                 data.equipos_historial.forEach(eq => {
                     const equipoNombre = eq.equipo && eq.equipo.trim() !== '' ? eq.equipo : '(equipo no disponible)';
                     const categoriaNombre = eq.categoria && eq.categoria.trim() !== '' ? eq.categoria : '-';
@@ -851,16 +1122,16 @@ function mostrarHistorialJugador(jugadorId, categoriaId) {
                     htmlEquipos += `
                         <div class="list-group-item py-2">
                             <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1 fs-6"><i class="fas fa-shield-alt text-primary"></i> ${equipoNombre}</h6>
+                                <h6 class="mb-1 ${isMobile ? 'fs-6 small' : 'fs-6'}"><i class="fas fa-shield-alt text-primary"></i> ${equipoNombre}</h6>
                             </div>
-                            <p class="mb-1 text-muted">${campeonatoNombre} - ${categoriaNombre}</p>
-                            <small class="text-muted"><i class="fas fa-calendar"></i> ${fechaInicio}${fechaFin}</small>
+                            <p class="mb-1 text-muted ${isMobile ? 'small' : ''}">${campeonatoNombre} - ${categoriaNombre}</p>
+                            <small class="text-muted ${isMobile ? 'small' : ''}"><i class="fas fa-calendar"></i> ${fechaInicio}${fechaFin}</small>
                         </div>`;
                 });
                 htmlEquipos += `</div>`;
                 document.getElementById('historialEquipos').innerHTML = htmlEquipos;
             } else {
-                document.getElementById('historialEquipos').innerHTML = '<p class="text-muted">Sin historial de equipos.</p>';
+                document.getElementById('historialEquipos').innerHTML = `<p class="text-muted ${isMobile ? 'small' : ''}">Sin historial de equipos.</p>`;
             }
             modal.show();
         })

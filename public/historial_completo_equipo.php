@@ -304,6 +304,87 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
         .torneos-index a { text-decoration: none; }
         .torneos-index .badge { font-size: 0.8rem; }
         .anchor-offset { scroll-margin-top: 90px; }
+        
+        /* Estilos móviles */
+        @media (max-width: 768px) {
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            h1, h5 {
+                font-size: 1.5rem;
+            }
+            
+            .table-responsive {
+                font-size: 0.8rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.5rem 0.3rem;
+                font-size: 0.8rem;
+            }
+            
+            .table th.d-none-mobile,
+            .table td.d-none-mobile {
+                display: none;
+            }
+            
+            .table th.hide-xs,
+            .table td.hide-xs {
+                display: none;
+            }
+            
+            .stat-card {
+                padding: 0.75rem;
+            }
+            
+            .col-6, .col-md-3 {
+                margin-bottom: 0.75rem;
+            }
+            
+            .torneos-index {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+            
+            .alert {
+                padding: 1rem;
+            }
+            
+            img {
+                width: 60px !important;
+                height: 60px !important;
+            }
+            
+            .card-body {
+                padding: 1rem;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            h1, h5 {
+                font-size: 1.25rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.4rem 0.2rem;
+                font-size: 0.75rem;
+            }
+            
+            .stat-card {
+                padding: 0.5rem;
+            }
+            
+            .col-6 {
+                margin-bottom: 0.5rem;
+            }
+            
+            img {
+                width: 50px !important;
+                height: 50px !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -442,14 +523,14 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
                         <thead class="table-light">
                             <tr>
                                 <th style="width: 25%;">Torneo</th>
-                                <th class="text-center" style="width: 8%;">PJ</th>
-                                <th class="text-center" style="width: 8%;">PG</th>
-                                <th class="text-center" style="width: 8%;">PE</th>
-                                <th class="text-center" style="width: 8%;">PP</th>
-                                <th class="text-center" style="width: 8%;">GF</th>
-                                <th class="text-center" style="width: 8%;">GC</th>
-                                <th class="text-center" style="width: 8%;">DIF</th>
-                                <th class="text-center" style="width: 11%;">Jugadores</th>
+                                <th class="text-center d-none-mobile" style="width: 8%;">PJ</th>
+                                <th class="text-center hide-xs" style="width: 8%;">PG</th>
+                                <th class="text-center hide-xs" style="width: 8%;">PE</th>
+                                <th class="text-center hide-xs" style="width: 8%;">PP</th>
+                                <th class="text-center hide-xs" style="width: 8%;">GF</th>
+                                <th class="text-center hide-xs" style="width: 8%;">GC</th>
+                                <th class="text-center d-none-mobile" style="width: 8%;">DIF</th>
+                                <th class="text-center hide-xs" style="width: 11%;">Jugadores</th>
                                 <th class="text-center" style="width: 8%;">Acción</th>
                             </tr>
                         </thead>
@@ -464,18 +545,18 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
                                     <strong><?php echo htmlspecialchars($torneo['instancia']['campeonato']); ?></strong>
                                     <br><small class="text-muted"><?php echo htmlspecialchars($torneo['instancia']['categoria']); ?> · <?php echo date('Y', strtotime($torneo['instancia']['fecha_inicio'])); ?></small>
                                 </td>
-                                <td class="text-center"><?php echo $torneo['stats']['partidos_jugados'] ?? 0; ?></td>
-                                <td class="text-center"><strong class="text-success"><?php echo $torneo['stats']['ganados'] ?? 0; ?></strong></td>
-                                <td class="text-center"><strong class="text-warning"><?php echo $torneo['stats']['empatados'] ?? 0; ?></strong></td>
-                                <td class="text-center"><strong class="text-danger"><?php echo $torneo['stats']['perdidos'] ?? 0; ?></strong></td>
-                                <td class="text-center"><strong class="text-primary"><?php echo $torneo['stats']['goles_favor'] ?? 0; ?></strong></td>
-                                <td class="text-center"><strong class="text-danger"><?php echo $torneo['stats']['goles_contra'] ?? 0; ?></strong></td>
-                                <td class="text-center">
+                                <td class="text-center d-none-mobile"><?php echo $torneo['stats']['partidos_jugados'] ?? 0; ?></td>
+                                <td class="text-center hide-xs"><strong class="text-success"><?php echo $torneo['stats']['ganados'] ?? 0; ?></strong></td>
+                                <td class="text-center hide-xs"><strong class="text-warning"><?php echo $torneo['stats']['empatados'] ?? 0; ?></strong></td>
+                                <td class="text-center hide-xs"><strong class="text-danger"><?php echo $torneo['stats']['perdidos'] ?? 0; ?></strong></td>
+                                <td class="text-center hide-xs"><strong class="text-primary"><?php echo $torneo['stats']['goles_favor'] ?? 0; ?></strong></td>
+                                <td class="text-center hide-xs"><strong class="text-danger"><?php echo $torneo['stats']['goles_contra'] ?? 0; ?></strong></td>
+                                <td class="text-center d-none-mobile">
                                     <strong class="<?php echo $dif > 0 ? 'text-success' : ($dif < 0 ? 'text-danger' : ''); ?>">
                                         <?php echo $sign . $dif; ?>
                                     </strong>
                                 </td>
-                                <td class="text-center">
+                                <td class="text-center hide-xs">
                                     <small class="text-muted">
                                         <i class="fas fa-users"></i> <?php echo $torneo['jugadores']; ?>
                                     </small>
@@ -509,8 +590,8 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
                                     <thead class="table-light">
                                         <tr>
                                             <th>Jugador</th>
-                                            <th>DNI</th>
-                                            <th>Edad</th>
+                                            <th class="d-none-mobile">DNI</th>
+                                            <th class="hide-xs">Edad</th>
                                             <th>Torneos</th>
                                         </tr>
                                     </thead>
@@ -546,8 +627,8 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
                                                     <?php endif; ?>
                                                     <?php echo htmlspecialchars($jugador['info']['apellido_nombre']); ?>
                                                 </td>
-                                                <td><?php echo htmlspecialchars($jugador['info']['dni']); ?></td>
-                                                <td><?php echo calculateAge($jugador['info']['fecha_nacimiento']); ?></td>
+                                                <td class="d-none-mobile"><?php echo htmlspecialchars($jugador['info']['dni']); ?></td>
+                                                <td class="hide-xs"><?php echo calculateAge($jugador['info']['fecha_nacimiento']); ?></td>
                                                 <td>
                                                     <span class="badge bg-info"><?php echo count($jugador['torneos']); ?></span>
                                                     <button class="btn btn-sm btn-outline-secondary py-0 px-1" 

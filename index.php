@@ -614,16 +614,20 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
                                         // Calcular tiempo igual que en partido_live.php
                                         $segundosTotales = (int)($partido['segundos_transcurridos'] ?? 0);
                                         $tiempoActual = $partido['tiempo_actual'] ?? '';
+                                        $minutoPeriodo = (int)($partido['minuto_periodo'] ?? 0);
                                         
-                                        // Determinar segundos de inicio del período actual
-                                        // En segundo_tiempo, siempre se resta 1800 segundos (30 min del 1°T)
-                                        $segundosInicioPeriodo = 0;
-                                        if ($tiempoActual === 'segundo_tiempo') {
-                                            $segundosInicioPeriodo = 1800; // El primer tiempo siempre dura 30 minutos
+                                        // Calcular tiempo transcurrido en el período actual
+                                        if ($tiempoActual === 'primer_tiempo') {
+                                            $transcurrido = $segundosTotales;
+                                        } else if ($tiempoActual === 'segundo_tiempo') {
+                                            // El servidor calcula minuto_periodo como: min(30, floor((segundos - 1800) / 60))
+                                            // Esto asume que el primer tiempo duró 1800 segundos
+                                            // Para ser consistente, usamos la misma lógica:
+                                            $transcurrido = max(0, $segundosTotales - 1800);
+                                        } else {
+                                            $transcurrido = 0;
                                         }
                                         
-                                        // Calcular tiempo transcurrido en el período actual (debe arrancar desde 0 en el 2°T)
-                                        $transcurrido = max(0, $segundosTotales - $segundosInicioPeriodo);
                                         $mins = floor($transcurrido / 60);
                                         $secs = $transcurrido % 60;
                                         
@@ -821,22 +825,23 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
                             const segundosTotales = parseInt(partido.segundos_transcurridos) || 0;
                             const tiempoActual = partido.tiempo_actual || '';
                             
-                            // Determinar segundos de inicio del período actual
-                            // En partido_live.php: 
-                            // - primer_tiempo: segundosInicioPeriodo = 0
-                            // - segundo_tiempo: segundosInicioPeriodo = segundosCronometro cuando comenzó el 2°T (aprox 1800)
-                            // Y minuto_periodo se calcula como: min(30, floor((segundos - 1800) / 60)) para segundo_tiempo
-                            let segundosInicioPeriodo = 0;
-                            if (tiempoActual === 'segundo_tiempo') {
-                                // El segundo tiempo arranca desde 0
-                                // En partido_live.php se calcula: minuto_periodo = min(30, floor((segundos - 1800) / 60))
-                                // Esto significa que se resta 1800 segundos (30 min del 1°T) antes de calcular
-                                // Así que: transcurrido = segundosTotales - 1800
-                                segundosInicioPeriodo = 1800; // El primer tiempo siempre dura 30 minutos (1800 seg)
+                            // Calcular tiempo transcurrido en el período actual
+                            // En partido_live.php, el cálculo es:
+                            // - primer_tiempo: transcurrido = segundosCronometro (desde 0)
+                            // - segundo_tiempo: transcurrido = segundosCronometro - segundosInicioPeriodo
+                            //   donde segundosInicioPeriodo = segundosCronometro cuando comenzó el 2°T
+                            
+                            let transcurrido = 0;
+                            if (tiempoActual === 'primer_tiempo') {
+                                // En el primer tiempo, el tiempo transcurrido es directamente segundosTotales
+                                transcurrido = segundosTotales;
+                            } else if (tiempoActual === 'segundo_tiempo') {
+                                // El servidor calcula minuto_periodo como: min(30, floor((segundos - 1800) / 60))
+                                // Esto asume que el primer tiempo duró 1800 segundos
+                                // Para ser consistente, usamos la misma lógica:
+                                transcurrido = Math.max(0, segundosTotales - 1800);
                             }
                             
-                            // Calcular tiempo transcurrido en el período actual (debe arrancar desde 0 en el 2°T)
-                            const transcurrido = Math.max(0, segundosTotales - segundosInicioPeriodo);
                             const mins = Math.floor(transcurrido / 60);
                             const secs = transcurrido % 60;
                             

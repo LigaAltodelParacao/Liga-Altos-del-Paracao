@@ -92,6 +92,82 @@ if ($categoria_id) {
             padding: 1rem;
             border-radius: 10px 10px 0 0;
         }
+        
+        /* Estilos móviles */
+        @media (max-width: 768px) {
+            .container-fluid {
+                padding: 0.5rem;
+            }
+            
+            h2 {
+                font-size: 1.5rem;
+            }
+            
+            .tabla-posiciones {
+                font-size: 0.75rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.4rem 0.2rem;
+                font-size: 0.75rem;
+            }
+            
+            .table th.d-none-mobile,
+            .table td.d-none-mobile {
+                display: none;
+            }
+            
+            .table th.hide-xs,
+            .table td.hide-xs {
+                display: none;
+            }
+            
+            .table img {
+                width: 18px !important;
+                height: 18px !important;
+            }
+            
+            .zona-card {
+                margin-bottom: 1rem;
+            }
+            
+            .zona-header {
+                padding: 0.75rem;
+                font-size: 0.9rem;
+            }
+            
+            .col-md-6 {
+                margin-bottom: 1rem;
+            }
+            
+            .badge {
+                font-size: 0.7rem;
+                padding: 0.2rem 0.4rem;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .tabla-posiciones {
+                font-size: 0.7rem;
+            }
+            
+            .table th, .table td {
+                padding: 0.3rem 0.15rem;
+                font-size: 0.7rem;
+            }
+            
+            h2 {
+                font-size: 1.25rem;
+            }
+            
+            .table-responsive {
+                font-size: 0.7rem;
+            }
+        }
+        
+        .table-responsive {
+            -webkit-overflow-scrolling: touch;
+        }
     </style>
 </head>
 <body>
@@ -140,13 +216,13 @@ if ($categoria_id) {
                                                 <th style="width: 5%;">Pos</th>
                                                 <th>Equipo</th>
                                                 <th class="text-center" style="width: 6%;">Pts</th>
-                                                <th class="text-center" style="width: 5%;">PJ</th>
-                                                <th class="text-center" style="width: 5%;">PG</th>
-                                                <th class="text-center" style="width: 5%;">PE</th>
-                                                <th class="text-center" style="width: 5%;">PP</th>
-                                                <th class="text-center" style="width: 6%;">GF</th>
-                                                <th class="text-center" style="width: 6%;">GC</th>
-                                                <th class="text-center" style="width: 6%;">Dif</th>
+                                                <th class="text-center d-none-mobile" style="width: 5%;">PJ</th>
+                                                <th class="text-center hide-xs" style="width: 5%;">PG</th>
+                                                <th class="text-center hide-xs" style="width: 5%;">PE</th>
+                                                <th class="text-center hide-xs" style="width: 5%;">PP</th>
+                                                <th class="text-center hide-xs" style="width: 6%;">GF</th>
+                                                <th class="text-center hide-xs" style="width: 6%;">GC</th>
+                                                <th class="text-center d-none-mobile" style="width: 6%;">Dif</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -161,16 +237,16 @@ if ($categoria_id) {
                                                             <img src="../uploads/<?= htmlspecialchars($equipo['logo']) ?>" 
                                                                  width="25" height="25" class="me-2" style="object-fit: contain;">
                                                         <?php endif; ?>
-                                                        <?= htmlspecialchars($equipo['equipo']) ?>
+                                                        <span class="d-inline-block" style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= htmlspecialchars($equipo['equipo']) ?></span>
                                                     </td>
                                                     <td class="text-center"><strong><?= $equipo['puntos'] ?></strong></td>
-                                                    <td class="text-center"><?= $equipo['partidos_jugados'] ?></td>
-                                                    <td class="text-center"><?= $equipo['partidos_ganados'] ?></td>
-                                                    <td class="text-center"><?= $equipo['partidos_empatados'] ?></td>
-                                                    <td class="text-center"><?= $equipo['partidos_perdidos'] ?></td>
-                                                    <td class="text-center"><?= $equipo['goles_favor'] ?></td>
-                                                    <td class="text-center"><?= $equipo['goles_contra'] ?></td>
-                                                    <td class="text-center">
+                                                    <td class="text-center d-none-mobile"><?= $equipo['partidos_jugados'] ?></td>
+                                                    <td class="text-center hide-xs"><?= $equipo['partidos_ganados'] ?></td>
+                                                    <td class="text-center hide-xs"><?= $equipo['partidos_empatados'] ?></td>
+                                                    <td class="text-center hide-xs"><?= $equipo['partidos_perdidos'] ?></td>
+                                                    <td class="text-center hide-xs"><?= $equipo['goles_favor'] ?></td>
+                                                    <td class="text-center hide-xs"><?= $equipo['goles_contra'] ?></td>
+                                                    <td class="text-center d-none-mobile">
                                                         <span class="<?= $equipo['diferencia_gol'] > 0 ? 'text-success' : ($equipo['diferencia_gol'] < 0 ? 'text-danger' : '') ?>">
                                                             <?= $equipo['diferencia_gol'] > 0 ? '+' : '' ?><?= $equipo['diferencia_gol'] ?>
                                                         </span>

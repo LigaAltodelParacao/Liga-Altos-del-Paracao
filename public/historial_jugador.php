@@ -127,6 +127,85 @@ function calculateAge($birthDate) {
             background: white;
             padding: 5px;
         }
+        
+        /* Estilos móviles */
+        @media (max-width: 768px) {
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            h5 {
+                font-size: 1.25rem;
+            }
+            
+            .stat-card {
+                padding: 0.75rem;
+            }
+            
+            .stat-number {
+                font-size: 1.5rem;
+            }
+            
+            .col-3, .col-6, .col-md-3, .col-md-4, .col-md-5 {
+                margin-bottom: 0.75rem;
+            }
+            
+            .chips {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+            
+            .chips .badge {
+                margin-bottom: 0.25rem;
+            }
+            
+            .timeline-item {
+                padding-left: 1rem;
+            }
+            
+            .col-md-4, .col-md-3 {
+                margin-bottom: 0.5rem;
+            }
+            
+            .card-body {
+                padding: 1rem;
+            }
+            
+            img {
+                width: 40px !important;
+                height: 40px !important;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            h5 {
+                font-size: 1rem;
+            }
+            
+            .stat-number {
+                font-size: 1.25rem;
+            }
+            
+            .col-3, .col-6 {
+                margin-bottom: 0.5rem;
+            }
+            
+            .timeline-item {
+                padding-left: 0.75rem;
+                padding-bottom: 0.75rem;
+            }
+            
+            img {
+                width: 30px !important;
+                height: 30px !important;
+            }
+            
+            .badge {
+                font-size: 0.7rem;
+                padding: 0.25rem 0.5rem;
+            }
+        }
     </style>
 </head>
 <body>

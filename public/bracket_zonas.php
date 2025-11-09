@@ -149,6 +149,68 @@ $nombres_fases = [
         .fase-inactiva {
             opacity: 0.5;
         }
+        
+        /* Estilos móviles */
+        @media (max-width: 768px) {
+            .container-fluid {
+                padding: 0.5rem;
+            }
+            
+            h2 {
+                font-size: 1.5rem;
+            }
+            
+            .bracket-container {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .fase-column {
+                min-width: 100%;
+                margin: 0 0 1rem 0;
+            }
+            
+            .partido-item {
+                padding: 0.75rem;
+                min-height: 80px;
+            }
+            
+            .equipo-nombre {
+                font-size: 0.85rem;
+            }
+            
+            .equipo-goles {
+                font-size: 1rem;
+            }
+            
+            .fase-title {
+                font-size: 0.9rem;
+                padding: 0.5rem;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            h2 {
+                font-size: 1.25rem;
+            }
+            
+            .partido-item {
+                padding: 0.5rem;
+                min-height: 70px;
+            }
+            
+            .equipo-nombre {
+                font-size: 0.8rem;
+            }
+            
+            .equipo-goles {
+                font-size: 0.9rem;
+            }
+            
+            .fase-title {
+                font-size: 0.85rem;
+            }
+        }
     </style>
 </head>
 <body>
