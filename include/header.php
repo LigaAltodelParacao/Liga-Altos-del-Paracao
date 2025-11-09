@@ -69,6 +69,9 @@ try {
                 <li class="nav-item">
                     <a class="nav-link" href="<?php echo $public_path; ?>fairplay.php">Fairplay</a>
                 </li>
+				<li class="nav-item">
+                    <a class="nav-link" href="<?php echo $public_path; ?>estadisticas_historicas.php">Estadisticas</a>
+                </li>
                 <?php
                 // Mostrar Torneo Nocturno solo si existe y está activo
                 try {
