@@ -236,6 +236,18 @@ if (!empty($_GET['ajax'])) {
         echo json_encode(['partido' => $partido, 'eventos' => $eventos]);
         exit;
     }
+    elseif ($_GET['ajax'] === 'update_minutes') {
+        $stmt = $db->query("
+            SELECT id, minuto_periodo, segundos_transcurridos, tiempo_actual, iniciado_at, 
+                   goles_local, goles_visitante
+            FROM partidos
+            WHERE estado = 'en_curso'
+        ");
+        $partidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        echo json_encode($partidos);
+        exit;
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -490,8 +502,45 @@ if (!empty($_GET['ajax'])) {
                                             <!-- Marcador central -->
                                             <div class="text-center my-3">
                                                 <div class="score-display"><?= $partido['goles_local'] ?> - <?= $partido['goles_visitante'] ?></div>
-                                                <div class="match-timer" id="timer-<?= $partido['id'] ?>">
-                                                    <?= $partido['minuto_actual'] ?? 0 ?>' 
+                                                <div class="match-timer" id="timer-<?= $partido['id'] ?>" 
+                                                     data-partido-id="<?= $partido['id'] ?>"
+                                                     data-segundos="<?= $partido['segundos_transcurridos'] ?? 0 ?>"
+                                                     data-tiempo="<?= htmlspecialchars($partido['tiempo_actual'] ?? '') ?>">
+                                                    <?php 
+                                                        if (($partido['tiempo_actual'] ?? '') === 'descanso') {
+                                                            echo 'Descanso';
+                                                        } elseif (($partido['tiempo_actual'] ?? '') === 'finalizado') {
+                                                            echo 'Finalizado';
+                                                        } else {
+                                                            // Calcular tiempo igual que en partido_live.php
+                                                            $segundosTotales = (int)($partido['segundos_transcurridos'] ?? 0);
+                                                            $tiempoActual = $partido['tiempo_actual'] ?? '';
+                                                            
+                                                            // Determinar segundos de inicio del período actual
+                                                            // En segundo_tiempo, siempre se resta 1800 segundos (30 min del 1°T)
+                                                            $segundosInicioPeriodo = 0;
+                                                            if ($tiempoActual === 'segundo_tiempo') {
+                                                                $segundosInicioPeriodo = 1800; // El primer tiempo siempre dura 30 minutos
+                                                            }
+                                                            
+                                                            // Calcular tiempo transcurrido en el período actual (debe arrancar desde 0 en el 2°T)
+                                                            $transcurrido = max(0, $segundosTotales - $segundosInicioPeriodo);
+                                                            $mins = floor($transcurrido / 60);
+                                                            $secs = $transcurrido % 60;
+                                                            
+                                                            // Formato igual que partido_live.php
+                                                            if ($transcurrido <= 1800) { // 30 minutos = 1800 segundos
+                                                                $texto = str_pad($mins, 2, '0', STR_PAD_LEFT) . ':' . str_pad($secs, 2, '0', STR_PAD_LEFT);
+                                                            } else {
+                                                                $minutosExtra = $mins - 30;
+                                                                $texto = "30'" . ($minutosExtra > 0 ? '+' . $minutosExtra : '') . "'";
+                                                            }
+                                                            
+                                                            // Agregar período
+                                                            $periodo = ($tiempoActual === 'primer_tiempo') ? ' 1°T' : ' 2°T';
+                                                            echo $texto . $periodo;
+                                                        }
+                                                    ?>
                                                 </div>
                                                 <small class="text-muted d-block mt-1">
                                                     <?= ucfirst(str_replace('_', ' ', $partido['tiempo_actual'] ?? '')) ?>
@@ -764,7 +813,41 @@ if (!empty($_GET['ajax'])) {
                             `<span class="logo-placeholder me-2">${p.equipo_visitante.charAt(0)}</span>`;
 
                         const tiempoTexto = (p.tiempo_actual || '').replace(/_/g, ' ');
-                        const minutoActual = p.minuto_actual || 0;
+                        
+                        // Calcular tiempo igual que en partido_live.php
+                        let tiempoDisplay = '';
+                        if (p.tiempo_actual === 'descanso') {
+                            tiempoDisplay = 'Descanso';
+                        } else if (p.tiempo_actual === 'finalizado') {
+                            tiempoDisplay = 'Finalizado';
+                        } else {
+                            const segundosTotales = parseInt(p.segundos_transcurridos) || 0;
+                            const tiempoActual = p.tiempo_actual || '';
+                            
+                            // Determinar segundos de inicio del período actual
+                            // En segundo_tiempo, siempre se resta 1800 segundos (30 min del 1°T)
+                            let segundosInicioPeriodo = 0;
+                            if (tiempoActual === 'segundo_tiempo') {
+                                segundosInicioPeriodo = 1800; // El primer tiempo siempre dura 30 minutos
+                            }
+                            
+                            // Calcular tiempo transcurrido en el período actual (debe arrancar desde 0 en el 2°T)
+                            const transcurrido = Math.max(0, segundosTotales - segundosInicioPeriodo);
+                            const mins = Math.floor(transcurrido / 60);
+                            const secs = transcurrido % 60;
+                            
+                            // Formato igual que partido_live.php
+                            if (transcurrido <= 1800) { // 30 minutos = 1800 segundos
+                                tiempoDisplay = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+                            } else {
+                                const minutosExtra = mins - 30;
+                                tiempoDisplay = `30'${minutosExtra > 0 ? '+' + minutosExtra : ''}'`;
+                            }
+                            
+                            // Agregar período
+                            const periodo = (tiempoActual === 'primer_tiempo') ? ' 1°T' : ' 2°T';
+                            tiempoDisplay += periodo;
+                        }
 
                         html += `
                         <div class="col-lg-6 col-xl-4" data-partido-id="${p.id}">
@@ -787,7 +870,10 @@ if (!empty($_GET['ajax'])) {
 
                                     <div class="text-center my-3">
                                         <div class="score-display">${p.goles_local} - ${p.goles_visitante}</div>
-                                        <div class="match-timer" id="timer-${p.id}">${minutoActual}'</div>
+                                        <div class="match-timer" id="timer-${p.id}" 
+                                             data-partido-id="${p.id}"
+                                             data-segundos="${p.segundos_transcurridos || 0}"
+                                             data-tiempo="${p.tiempo_actual || ''}">${tiempoDisplay}</div>
                                         <small class="text-muted d-block mt-1">${tiempoTexto}</small>
                                     </div>
 
@@ -872,9 +958,60 @@ if (!empty($_GET['ajax'])) {
                 .catch(err => console.error('Error al actualizar eventos:', err));
         }
 
+        // Función para actualizar solo los relojes (más frecuente)
+        function actualizarRelojes() {
+            fetch('?ajax=update_minutes')
+                .then(response => response.json())
+                .then(partidos => {
+                    partidos.forEach(partido => {
+                        const timerDisplay = document.getElementById(`timer-${partido.id}`);
+                        if (timerDisplay) {
+                            let texto = '';
+                            if (partido.tiempo_actual === 'descanso') {
+                                texto = 'Descanso';
+                            } else if (partido.tiempo_actual === 'finalizado') {
+                                texto = 'Finalizado';
+                            } else {
+                                // Calcular tiempo igual que en partido_live.php
+                                const segundosTotales = parseInt(partido.segundos_transcurridos) || 0;
+                                const tiempoActual = partido.tiempo_actual || '';
+                                
+                                // Determinar segundos de inicio del período actual
+                                // En segundo_tiempo, siempre se resta 1800 segundos (30 min del 1°T)
+                                let segundosInicioPeriodo = 0;
+                                if (tiempoActual === 'segundo_tiempo') {
+                                    segundosInicioPeriodo = 1800; // El primer tiempo siempre dura 30 minutos
+                                }
+                                
+                                // Calcular tiempo transcurrido en el período actual (debe arrancar desde 0 en el 2°T)
+                                const transcurrido = Math.max(0, segundosTotales - segundosInicioPeriodo);
+                                const mins = Math.floor(transcurrido / 60);
+                                const secs = transcurrido % 60;
+                                
+                                // Formato igual que partido_live.php
+                                if (transcurrido <= 1800) { // 30 minutos = 1800 segundos
+                                    texto = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+                                } else {
+                                    const minutosExtra = mins - 30;
+                                    texto = `30'${minutosExtra > 0 ? '+' + minutosExtra : ''}'`;
+                                }
+                                
+                                // Agregar período
+                                const periodo = (tiempoActual === 'primer_tiempo') ? ' 1°T' : ' 2°T';
+                                texto += periodo;
+                            }
+                            timerDisplay.textContent = texto;
+                        }
+                    });
+                })
+                .catch(error => console.error('Error actualizando relojes:', error));
+        }
+
         const hayPartidosVivo = partidosEnVivoContainer?.querySelector('[data-partido-id]');
         if (hayPartidosVivo) {
             setInterval(actualizarPartidosEnVivo, 8000);
+            // Actualizar relojes más frecuentemente (cada 3 segundos)
+            setInterval(actualizarRelojes, 3000);
         } else {
             setInterval(actualizarPartidosEnVivo, 30000);
         }

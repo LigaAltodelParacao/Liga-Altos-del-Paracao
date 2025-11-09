@@ -14,9 +14,6 @@ $filtro_campeonato_directo = $campeonato_id > 0 ? "WHERE campeonato_id = $campeo
 // ESTADÍSTICAS GENERALES POR EQUIPO
 // ====================================
 
-// Equipo con más campeonatos ganados (requiere tabla de ganadores - por implementar)
-// Por ahora dejamos preparada la estructura
-
 // Equipo con más partidos jugados
 $query_mas_partidos = "
 SELECT e.nombre, e.logo,
@@ -285,181 +282,274 @@ $campeonatos = $db->query($query_campeonatos)->fetchAll();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Estadísticas Históricas - Liga de Fútbol</title>
+    <title>Estadísticas Históricas - Liga Altos del Paracao</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #198754;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #0dcaf0;
+            --dark-bg: #1a1a1a;
+            --card-bg: #ffffff;
+            --text-muted: #6c757d;
+        }
+
         body {
-            background-color: #f8f9fa;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             min-height: 100vh;
         }
-        
+
         .stats-container {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+            border: 1px solid rgba(0,0,0,0.05);
         }
         
         .stat-card {
             background: white;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 15px;
-            transition: all 0.3s;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
             height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), #20c997);
         }
         
         .stat-card:hover {
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            transform: translateY(-4px);
         }
         
-        .stat-card.gold {
-            background: #fff9e6;
-            border-color: #ffc107;
+        .stat-card.gold::before {
+            background: linear-gradient(90deg, #ffc107, #ff9800);
         }
         
-        .stat-card.silver {
-            background: #f8f9fa;
-            border-color: #6c757d;
+        .stat-card.silver::before {
+            background: linear-gradient(90deg, #6c757d, #495057);
         }
         
-        .stat-card.bronze {
-            background: #fff3e6;
-            border-color: #fd7e14;
+        .stat-card.bronze::before {
+            background: linear-gradient(90deg, #fd7e14, #e65100);
+        }
+
+        .stat-card.danger::before {
+            background: linear-gradient(90deg, #dc3545, #c82333);
         }
         
         .stat-icon {
-            font-size: 2em;
-            margin-bottom: 8px;
-            color: #28a745;
+            font-size: 2.5rem;
+            margin-bottom: 12px;
+            color: var(--primary-color);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover .stat-icon {
+            transform: scale(1.1);
         }
         
         .stat-value {
-            font-size: 1.8em;
+            font-size: 2.2rem;
             font-weight: bold;
-            color: #333;
-            margin: 8px 0;
+            color: #2c3e50;
+            margin: 12px 0;
+            font-family: 'Courier New', monospace;
         }
         
         .stat-label {
-            font-size: 0.75em;
-            color: #6c757d;
+            font-size: 0.85rem;
+            color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
             font-weight: 600;
+            margin-bottom: 8px;
         }
         
         .team-logo {
-            width: 40px;
-            height: 40px;
+            width: 50px;
+            height: 50px;
             object-fit: contain;
-            margin: 8px auto;
+            margin: 12px auto;
             display: block;
+            border-radius: 8px;
+            background: #f8f9fa;
+            padding: 4px;
+            border: 1px solid #e9ecef;
         }
         
         .team-name {
-            font-size: 0.9em;
+            font-size: 0.95rem;
             font-weight: 600;
             margin-top: 8px;
-            color: #333;
+            color: #2c3e50;
+            text-align: center;
         }
         
         .section-title {
-            font-size: 1.3em;
+            font-size: 1.5rem;
             font-weight: bold;
-            color: #333;
-            margin-bottom: 15px;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #28a745;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 3px solid var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title i {
+            color: var(--primary-color);
         }
         
         .record-item {
             background: #fff;
-            border: 1px solid #dee2e6;
-            border-left: 3px solid #28a745;
-            padding: 15px;
-            margin-bottom: 12px;
-            border-radius: 5px;
+            border: 1px solid #e9ecef;
+            border-left: 4px solid var(--primary-color);
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+        }
+
+        .record-item:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateX(4px);
         }
         
         .badge-custom {
-            padding: 5px 12px;
-            border-radius: 15px;
-            font-size: 0.85em;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
             font-weight: 600;
         }
         
         .vs-separator {
-            color: #6c757d;
+            color: var(--text-muted);
             font-weight: bold;
-            margin: 0 8px;
+            margin: 0 12px;
+            font-size: 1.2rem;
         }
         
         .filter-section {
             background: white;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border: 1px solid rgba(0,0,0,0.05);
         }
         
         .page-header {
-            background: white;
-            border-radius: 8px;
-            padding: 25px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: linear-gradient(135deg, var(--primary-color) 0%, #145a32 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.1);
             text-align: center;
-            border: 1px solid #dee2e6;
+            color: white;
         }
-        
-        .navbar {
-            margin-bottom: 0;
+
+        .page-header h1 {
+            color: white;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .page-header p {
+            color: rgba(255,255,255,0.9);
+            margin: 0;
+        }
+
+        .top-goleador-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .top-goleador-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .medal-icon {
+            font-size: 2rem;
+            margin-right: 15px;
+            min-width: 40px;
+        }
+
+        .medal-gold { color: #FFD700; }
+        .medal-silver { color: #C0C0C0; }
+        .medal-bronze { color: #CD7F32; }
+
+        .record-match {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .record-team {
+            flex: 1;
+            min-width: 150px;
+            text-align: center;
+        }
+
+        .record-score {
+            flex: 0 0 auto;
+            text-align: center;
+            padding: 0 20px;
+        }
+
+        @media (max-width: 768px) {
+            .stat-value {
+                font-size: 1.8rem;
+            }
+            .stat-icon {
+                font-size: 2rem;
+            }
+            .record-match {
+                flex-direction: column;
+            }
+            .record-score {
+                padding: 15px 0;
+            }
         }
     </style>
 </head>
 <body>
     <!-- Header -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-success">
-        <div class="container">
-            <a class="navbar-brand" href="../index.php">
-                <i class="fas fa-futbol"></i> Fútbol Manager
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="../index.php"><i class="fas fa-home"></i> Inicio</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="tablas.php"><i class="fas fa-table"></i> Tablas</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="resultados.php"><i class="fas fa-list"></i> Resultados</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="estadisticas_historicas.php">
-                            <i class="fas fa-chart-line"></i> Estadísticas
-                        </a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    <?php include '../include/header.php'; ?>
 
     <div class="container my-4">
         <!-- Filtro de Campeonato -->
         <div class="filter-section">
-            <form method="GET" class="row align-items-center">
+            <form method="GET" class="row align-items-center g-3">
                 <div class="col-md-4">
-                    <label class="form-label"><strong>Filtrar por Campeonato:</strong></label>
+                    <label class="form-label fw-bold mb-0">
+                        <i class="fas fa-filter text-primary"></i> Filtrar por Campeonato:
+                    </label>
                 </div>
                 <div class="col-md-6">
                     <select name="campeonato_id" class="form-select" onchange="this.form.submit()">
@@ -485,10 +575,10 @@ $campeonatos = $db->query($query_campeonatos)->fetchAll();
         <!-- Título Principal -->
         <div class="page-header">
             <h1 class="mb-2">
-                <i class="fas fa-chart-bar text-success"></i> 
+                <i class="fas fa-chart-bar"></i> 
                 Estadísticas Históricas
             </h1>
-            <p class="text-muted mb-0">
+            <p class="mb-0">
                 Récords y estadísticas de todos los tiempos
             </p>
         </div>
@@ -500,85 +590,88 @@ $campeonatos = $db->query($query_campeonatos)->fetchAll();
             </h2>
             
             <div class="row">
-                <!-- Equipo con más partidos jugados -->
-                <?php if ($equipo_mas_partidos): ?>
-                <div class="col-md-6 col-lg-4 col-xl-3">
-                    <div class="stat-card text-center">
-                        <i class="fas fa-calendar-alt stat-icon text-primary"></i>
-                        <?php if ($equipo_mas_partidos['logo']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($equipo_mas_partidos['logo']); ?>" 
-                                 class="team-logo" alt="Logo">
-                        <?php endif; ?>
-                        <div class="stat-value text-primary"><?php echo $equipo_mas_partidos['total_partidos']; ?></div>
-                        <div class="stat-label">Partidos Jugados</div>
-                        <div class="team-name"><?php echo htmlspecialchars($equipo_mas_partidos['nombre']); ?></div>
+                <?php 
+                $estadisticas_equipos = [];
+                if ($equipo_mas_partidos) {
+                    $estadisticas_equipos[] = [
+                        'icono' => 'fa-calendar-alt',
+                        'color' => 'primary',
+                        'titulo' => 'Partidos Jugados',
+                        'valor' => $equipo_mas_partidos['total_partidos'],
+                        'nombre' => $equipo_mas_partidos['nombre'],
+                        'logo' => $equipo_mas_partidos['logo'],
+                        'sufijo' => 'partidos'
+                    ];
+                }
+                if ($equipo_mas_victorias) {
+                    $estadisticas_equipos[] = [
+                        'icono' => 'fa-trophy',
+                        'color' => 'warning',
+                        'titulo' => 'Victorias',
+                        'valor' => $equipo_mas_victorias['total_victorias'],
+                        'nombre' => $equipo_mas_victorias['nombre'],
+                        'logo' => $equipo_mas_victorias['logo'],
+                        'sufijo' => 'victorias'
+                    ];
+                }
+                if ($equipo_mas_goles_favor) {
+                    $estadisticas_equipos[] = [
+                        'icono' => 'fa-futbol',
+                        'color' => 'success',
+                        'titulo' => 'Goles a Favor',
+                        'valor' => $equipo_mas_goles_favor['total_goles'],
+                        'nombre' => $equipo_mas_goles_favor['nombre'],
+                        'logo' => $equipo_mas_goles_favor['logo'],
+                        'sufijo' => 'goles'
+                    ];
+                }
+                if ($equipo_mejor_diferencia) {
+                    $estadisticas_equipos[] = [
+                        'icono' => 'fa-chart-line',
+                        'color' => 'info',
+                        'titulo' => 'Diferencia de Gol',
+                        'valor' => '+' . $equipo_mejor_diferencia['diferencia_gol'],
+                        'nombre' => $equipo_mejor_diferencia['nombre'],
+                        'logo' => $equipo_mejor_diferencia['logo'],
+                        'sufijo' => 'diferencia'
+                    ];
+                }
+                if ($equipo_mas_goles_contra) {
+                    $estadisticas_equipos[] = [
+                        'icono' => 'fa-exclamation-triangle',
+                        'color' => 'danger',
+                        'titulo' => 'Goles en Contra',
+                        'valor' => $equipo_mas_goles_contra['total_goles_contra'],
+                        'nombre' => $equipo_mas_goles_contra['nombre'],
+                        'logo' => $equipo_mas_goles_contra['logo'],
+                        'sufijo' => 'goles'
+                    ];
+                }
+                foreach ($estadisticas_equipos as $index => $stat): ?>
+                <div class="col-md-12">
+                    <div class="top-goleador-item">
+                        <div class="d-flex align-items-center flex-grow-1">
+                            <div class="medal-icon">
+                                <i class="fas <?php echo $stat['icono']; ?> text-<?php echo $stat['color']; ?>" style="font-size: 1.8rem;"></i>
+                            </div>
+                            <?php if ($stat['logo']): ?>
+                                <img src="../uploads/<?php echo htmlspecialchars($stat['logo']); ?>" 
+                                     style="width: 45px; height: 45px; object-fit: contain; margin-right: 15px; border-radius: 8px; background: #f8f9fa; padding: 4px;" alt="Logo">
+                            <?php endif; ?>
+                            <div>
+                                <h5 class="mb-1 fw-bold"><?php echo htmlspecialchars($stat['nombre']); ?></h5>
+                                <small class="text-muted"><?php echo htmlspecialchars($stat['titulo']); ?></small>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <h3 class="mb-0 text-<?php echo $stat['color']; ?> fw-bold">
+                                <i class="fas <?php echo $stat['icono']; ?>"></i> <?php echo $stat['valor']; ?>
+                            </h3>
+                            <small class="text-muted"><?php echo $stat['sufijo']; ?></small>
+                        </div>
                     </div>
                 </div>
-                <?php endif; ?>
-
-                <!-- Equipo con más victorias -->
-                <?php if ($equipo_mas_victorias): ?>
-                <div class="col-md-6 col-lg-4 col-xl-3">
-                    <div class="stat-card gold text-center">
-                        <i class="fas fa-trophy stat-icon text-warning"></i>
-                        <?php if ($equipo_mas_victorias['logo']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($equipo_mas_victorias['logo']); ?>" 
-                                 class="team-logo" alt="Logo">
-                        <?php endif; ?>
-                        <div class="stat-value text-warning"><?php echo $equipo_mas_victorias['total_victorias']; ?></div>
-                        <div class="stat-label">Victorias</div>
-                        <div class="team-name"><?php echo htmlspecialchars($equipo_mas_victorias['nombre']); ?></div>
-                    </div>
-                </div>
-                <?php endif; ?>
-
-                <!-- Equipo con más goles a favor -->
-                <?php if ($equipo_mas_goles_favor): ?>
-                <div class="col-md-6 col-lg-4 col-xl-3">
-                    <div class="stat-card text-center">
-                        <i class="fas fa-futbol stat-icon text-success"></i>
-                        <?php if ($equipo_mas_goles_favor['logo']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($equipo_mas_goles_favor['logo']); ?>" 
-                                 class="team-logo" alt="Logo">
-                        <?php endif; ?>
-                        <div class="stat-value text-success"><?php echo $equipo_mas_goles_favor['total_goles']; ?></div>
-                        <div class="stat-label">Goles a Favor</div>
-                        <div class="team-name"><?php echo htmlspecialchars($equipo_mas_goles_favor['nombre']); ?></div>
-                    </div>
-                </div>
-                <?php endif; ?>
-
-                <!-- Mejor diferencia de gol -->
-                <?php if ($equipo_mejor_diferencia): ?>
-                <div class="col-md-6 col-lg-4 col-xl-3">
-                    <div class="stat-card silver text-center">
-                        <i class="fas fa-chart-line stat-icon text-info"></i>
-                        <?php if ($equipo_mejor_diferencia['logo']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($equipo_mejor_diferencia['logo']); ?>" 
-                                 class="team-logo" alt="Logo">
-                        <?php endif; ?>
-                        <div class="stat-value text-info">+<?php echo $equipo_mejor_diferencia['diferencia_gol']; ?></div>
-                        <div class="stat-label">Diferencia de Gol</div>
-                        <div class="team-name"><?php echo htmlspecialchars($equipo_mejor_diferencia['nombre']); ?></div>
-                    </div>
-                </div>
-                <?php endif; ?>
-
-                <!-- Equipo con más goles en contra -->
-                <?php if ($equipo_mas_goles_contra): ?>
-                <div class="col-md-6 col-lg-4 col-xl-3">
-                    <div class="stat-card text-center">
-                        <i class="fas fa-exclamation-triangle stat-icon text-danger"></i>
-                        <?php if ($equipo_mas_goles_contra['logo']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($equipo_mas_goles_contra['logo']); ?>" 
-                                 class="team-logo" alt="Logo">
-                        <?php endif; ?>
-                        <div class="stat-value text-danger"><?php echo $equipo_mas_goles_contra['total_goles_contra']; ?></div>
-                        <div class="stat-label">Goles en Contra</div>
-                        <div class="team-name"><?php echo htmlspecialchars($equipo_mas_goles_contra['nombre']); ?></div>
-                    </div>
-                </div>
-                <?php endif; ?>
+                <?php endforeach; ?>
             </div>
         </div>
 
@@ -589,75 +682,81 @@ $campeonatos = $db->query($query_campeonatos)->fetchAll();
             </h2>
             
             <div class="row">
-                <!-- Máximo goleador histórico -->
-                <?php if ($goleador_historico): ?>
-                <div class="col-md-6 col-lg-3">
-                    <div class="stat-card gold text-center">
-                        <i class="fas fa-crown stat-icon text-warning"></i>
-                        <?php if ($goleador_historico['logo']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($goleador_historico['logo']); ?>" 
-                                 class="team-logo" alt="Logo">
-                        <?php endif; ?>
-                        <div class="stat-value text-warning"><?php echo $goleador_historico['total_goles']; ?></div>
-                        <div class="stat-label">Goleador Histórico</div>
-                        <div class="team-name" style="font-size: 0.85em;"><?php echo htmlspecialchars($goleador_historico['apellido_nombre']); ?></div>
-                        <small class="text-muted" style="font-size: 0.75em;"><?php echo htmlspecialchars($goleador_historico['equipo']); ?></small>
+                <?php 
+                $estadisticas_individuales = [];
+                if ($goleador_historico) {
+                    $estadisticas_individuales[] = [
+                        'icono' => 'fa-crown',
+                        'color' => 'warning',
+                        'titulo' => 'Goleador Histórico',
+                        'valor' => $goleador_historico['total_goles'],
+                        'nombre' => $goleador_historico['apellido_nombre'],
+                        'equipo' => $goleador_historico['equipo'],
+                        'logo' => $goleador_historico['logo'],
+                        'sufijo' => 'goles'
+                    ];
+                }
+                if ($mas_goles_partido) {
+                    $estadisticas_individuales[] = [
+                        'icono' => 'fa-fire',
+                        'color' => 'danger',
+                        'titulo' => 'Goles en Partido',
+                        'valor' => $mas_goles_partido['goles_partido'],
+                        'nombre' => $mas_goles_partido['apellido_nombre'],
+                        'equipo' => $mas_goles_partido['equipo'] . ' vs ' . $mas_goles_partido['rival'],
+                        'logo' => $mas_goles_partido['logo'],
+                        'sufijo' => 'goles'
+                    ];
+                }
+                if ($mas_amarillas) {
+                    $estadisticas_individuales[] = [
+                        'icono' => 'fa-square',
+                        'color' => 'warning',
+                        'titulo' => 'Tarjetas Amarillas',
+                        'valor' => $mas_amarillas['total_amarillas'],
+                        'nombre' => $mas_amarillas['apellido_nombre'],
+                        'equipo' => $mas_amarillas['equipo'],
+                        'logo' => $mas_amarillas['logo'],
+                        'sufijo' => 'tarjetas'
+                    ];
+                }
+                if ($mas_rojas) {
+                    $estadisticas_individuales[] = [
+                        'icono' => 'fa-square',
+                        'color' => 'danger',
+                        'titulo' => 'Tarjetas Rojas',
+                        'valor' => $mas_rojas['total_rojas'],
+                        'nombre' => $mas_rojas['apellido_nombre'],
+                        'equipo' => $mas_rojas['equipo'],
+                        'logo' => $mas_rojas['logo'],
+                        'sufijo' => 'tarjetas'
+                    ];
+                }
+                foreach ($estadisticas_individuales as $index => $stat): ?>
+                <div class="col-md-12">
+                    <div class="top-goleador-item">
+                        <div class="d-flex align-items-center flex-grow-1">
+                            <div class="medal-icon">
+                                <i class="fas <?php echo $stat['icono']; ?> text-<?php echo $stat['color']; ?>" style="font-size: 1.8rem;"></i>
+                            </div>
+                            <?php if ($stat['logo']): ?>
+                                <img src="../uploads/<?php echo htmlspecialchars($stat['logo']); ?>" 
+                                     style="width: 45px; height: 45px; object-fit: contain; margin-right: 15px; border-radius: 8px; background: #f8f9fa; padding: 4px;" alt="Logo">
+                            <?php endif; ?>
+                            <div>
+                                <h5 class="mb-1 fw-bold"><?php echo htmlspecialchars($stat['nombre']); ?></h5>
+                                <small class="text-muted"><?php echo htmlspecialchars($stat['equipo']); ?> - <?php echo htmlspecialchars($stat['titulo']); ?></small>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <h3 class="mb-0 text-<?php echo $stat['color']; ?> fw-bold">
+                                <i class="fas <?php echo $stat['icono']; ?>"></i> <?php echo $stat['valor']; ?>
+                            </h3>
+                            <small class="text-muted"><?php echo $stat['sufijo']; ?></small>
+                        </div>
                     </div>
                 </div>
-                <?php endif; ?>
-
-                <!-- Más goles en un partido -->
-                <?php if ($mas_goles_partido): ?>
-                <div class="col-md-6 col-lg-3">
-                    <div class="stat-card text-center">
-                        <i class="fas fa-fire stat-icon text-danger"></i>
-                        <?php if ($mas_goles_partido['logo']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($mas_goles_partido['logo']); ?>" 
-                                 class="team-logo" alt="Logo">
-                        <?php endif; ?>
-                        <div class="stat-value text-danger"><?php echo $mas_goles_partido['goles_partido']; ?></div>
-                        <div class="stat-label">Goles en Partido</div>
-                        <div class="team-name" style="font-size: 0.85em;"><?php echo htmlspecialchars($mas_goles_partido['apellido_nombre']); ?></div>
-                        <small class="text-muted" style="font-size: 0.7em;">
-                            vs <?php echo htmlspecialchars($mas_goles_partido['rival']); ?>
-                        </small>
-                    </div>
-                </div>
-                <?php endif; ?>
-
-                <!-- Más amarillas -->
-                <?php if ($mas_amarillas): ?>
-                <div class="col-md-6 col-lg-3">
-                    <div class="stat-card text-center" style="background: #fffbf0; border-color: #ffc107;">
-                        <i class="fas fa-square stat-icon" style="color: #ffc107;"></i>
-                        <?php if ($mas_amarillas['logo']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($mas_amarillas['logo']); ?>" 
-                                 class="team-logo" alt="Logo">
-                        <?php endif; ?>
-                        <div class="stat-value" style="color: #ffc107;"><?php echo $mas_amarillas['total_amarillas']; ?></div>
-                        <div class="stat-label">Tarjetas Amarillas</div>
-                        <div class="team-name" style="font-size: 0.85em;"><?php echo htmlspecialchars($mas_amarillas['apellido_nombre']); ?></div>
-                        <small class="text-muted" style="font-size: 0.75em;"><?php echo htmlspecialchars($mas_amarillas['equipo']); ?></small>
-                    </div>
-                </div>
-                <?php endif; ?>
-
-                <!-- Más rojas -->
-                <?php if ($mas_rojas): ?>
-                <div class="col-md-6 col-lg-3">
-                    <div class="stat-card text-center" style="background: #fff5f5; border-color: #dc3545;">
-                        <i class="fas fa-square stat-icon text-danger"></i>
-                        <?php if ($mas_rojas['logo']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($mas_rojas['logo']); ?>" 
-                                 class="team-logo" alt="Logo">
-                        <?php endif; ?>
-                        <div class="stat-value text-danger"><?php echo $mas_rojas['total_rojas']; ?></div>
-                        <div class="stat-label">Tarjetas Rojas</div>
-                        <div class="team-name" style="font-size: 0.85em;"><?php echo htmlspecialchars($mas_rojas['apellido_nombre']); ?></div>
-                        <small class="text-muted" style="font-size: 0.75em;"><?php echo htmlspecialchars($mas_rojas['equipo']); ?></small>
-                    </div>
-                </div>
-                <?php endif; ?>
+                <?php endforeach; ?>
             </div>
         </div>
 
@@ -671,30 +770,30 @@ $campeonatos = $db->query($query_campeonatos)->fetchAll();
             <div class="row">
                 <?php foreach ($top_goleadores as $index => $goleador): ?>
                 <div class="col-md-12">
-                    <div class="record-item d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center">
-                            <div class="me-3">
+                    <div class="top-goleador-item">
+                        <div class="d-flex align-items-center flex-grow-1">
+                            <div class="medal-icon">
                                 <?php if ($index == 0): ?>
-                                    <i class="fas fa-medal fa-2x" style="color: #FFD700;"></i>
+                                    <i class="fas fa-medal medal-gold"></i>
                                 <?php elseif ($index == 1): ?>
-                                    <i class="fas fa-medal fa-2x" style="color: #C0C0C0;"></i>
+                                    <i class="fas fa-medal medal-silver"></i>
                                 <?php elseif ($index == 2): ?>
-                                    <i class="fas fa-medal fa-2x" style="color: #CD7F32;"></i>
+                                    <i class="fas fa-medal medal-bronze"></i>
                                 <?php else: ?>
-                                    <span class="badge bg-secondary" style="font-size: 1.2em;"><?php echo $index + 1; ?></span>
+                                    <span class="badge bg-secondary" style="font-size: 1.2em; padding: 8px 12px;"><?php echo $index + 1; ?></span>
                                 <?php endif; ?>
                             </div>
                             <?php if ($goleador['logo']): ?>
                                 <img src="../uploads/<?php echo htmlspecialchars($goleador['logo']); ?>" 
-                                     style="width: 40px; height: 40px; object-fit: contain; margin-right: 15px;" alt="Logo">
+                                     style="width: 45px; height: 45px; object-fit: contain; margin-right: 15px; border-radius: 8px; background: #f8f9fa; padding: 4px;" alt="Logo">
                             <?php endif; ?>
                             <div>
-                                <h5 class="mb-0"><?php echo htmlspecialchars($goleador['apellido_nombre']); ?></h5>
+                                <h5 class="mb-1 fw-bold"><?php echo htmlspecialchars($goleador['apellido_nombre']); ?></h5>
                                 <small class="text-muted"><?php echo htmlspecialchars($goleador['equipo']); ?></small>
                             </div>
                         </div>
                         <div class="text-end">
-                            <h3 class="mb-0 text-success">
+                            <h3 class="mb-0 text-success fw-bold">
                                 <i class="fas fa-futbol"></i> <?php echo $goleador['total_goles']; ?>
                             </h3>
                             <small class="text-muted">goles</small>
@@ -712,126 +811,82 @@ $campeonatos = $db->query($query_campeonatos)->fetchAll();
                 <i class="fas fa-fire"></i> Récords de Partidos
             </h2>
             
-            <!-- Mayor Goleada -->
-            <?php if ($mayor_goleada): ?>
-            <div class="record-item">
-                <h5 class="mb-3"><i class="fas fa-bolt text-warning"></i> Mayor Goleada</h5>
-                <div class="row align-items-center">
-                    <div class="col-md-5 text-center">
-                        <?php if ($mayor_goleada['logo_ganador']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($mayor_goleada['logo_ganador']); ?>" 
-                                 style="width: 50px; height: 50px; object-fit: contain; margin-bottom: 10px;" alt="Logo">
-                        <?php endif; ?>
-                        <h5><?php echo htmlspecialchars($mayor_goleada['equipo_ganador']); ?></h5>
-                    </div>
-                    <div class="col-md-2 text-center">
-                        <h2 class="text-success mb-0">
-                            <?php echo $mayor_goleada['goles_local']; ?>
-                            <span class="vs-separator">-</span>
-                            <?php echo $mayor_goleada['goles_visitante']; ?>
-                        </h2>
-                        <span class="badge badge-custom bg-danger">
-                            Diferencia: <?php echo $mayor_goleada['diferencia']; ?> goles
-                        </span>
-                    </div>
-                    <div class="col-md-5 text-center">
-                        <?php if ($mayor_goleada['logo_perdedor']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($mayor_goleada['logo_perdedor']); ?>" 
-                                 style="width: 50px; height: 50px; object-fit: contain; margin-bottom: 10px;" alt="Logo">
-                        <?php endif; ?>
-                        <h5><?php echo htmlspecialchars($mayor_goleada['equipo_perdedor']); ?></h5>
-                    </div>
-                </div>
-                <p class="text-center text-muted mt-3 mb-0">
-                    <i class="fas fa-calendar"></i> <?php echo date('d/m/Y', strtotime($mayor_goleada['fecha_partido'])); ?>
-                    <?php if ($mayor_goleada['cancha']): ?>
-                        | <i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($mayor_goleada['cancha']); ?>
-                    <?php endif; ?>
-                </p>
-            </div>
-            <?php endif; ?>
-
-            <!-- Partido con más goles -->
-            <?php if ($mas_goles_partido_total): ?>
-            <div class="record-item">
-                <h5 class="mb-3"><i class="fas fa-trophy text-success"></i> Partido con Más Goles</h5>
-                <div class="row align-items-center">
-                    <div class="col-md-5 text-center">
-                        <?php if ($mas_goles_partido_total['logo_local']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($mas_goles_partido_total['logo_local']); ?>" 
-                                 style="width: 50px; height: 50px; object-fit: contain; margin-bottom: 10px;" alt="Logo">
-                        <?php endif; ?>
-                        <h5><?php echo htmlspecialchars($mas_goles_partido_total['equipo_local']); ?></h5>
-                    </div>
-                    <div class="col-md-2 text-center">
-                        <h2 class="text-primary mb-0">
-                            <?php echo $mas_goles_partido_total['goles_local']; ?>
-                            <span class="vs-separator">-</span>
-                            <?php echo $mas_goles_partido_total['goles_visitante']; ?>
-                        </h2>
-                        <span class="badge badge-custom bg-success">
-                            Total: <?php echo $mas_goles_partido_total['total_goles']; ?> goles
-                        </span>
-                    </div>
-                    <div class="col-md-5 text-center">
-                        <?php if ($mas_goles_partido_total['logo_visitante']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($mas_goles_partido_total['logo_visitante']); ?>" 
-                                 style="width: 50px; height: 50px; object-fit: contain; margin-bottom: 10px;" alt="Logo">
-                        <?php endif; ?>
-                        <h5><?php echo htmlspecialchars($mas_goles_partido_total['equipo_visitante']); ?></h5>
-                    </div>
-                </div>
-                <p class="text-center text-muted mt-3 mb-0">
-                    <i class="fas fa-calendar"></i> <?php echo date('d/m/Y', strtotime($mas_goles_partido_total['fecha_partido'])); ?>
-                    <?php if ($mas_goles_partido_total['cancha']): ?>
-                        | <i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($mas_goles_partido_total['cancha']); ?>
-                    <?php endif; ?>
-                </p>
-            </div>
-            <?php endif; ?>
-
-            <!-- Partido con más expulsados -->
-            <?php if ($mas_expulsados): ?>
-            <div class="record-item">
-                <h5 class="mb-3"><i class="fas fa-exclamation-triangle text-danger"></i> Partido con Más Expulsiones</h5>
-                <div class="row align-items-center">
-                    <div class="col-md-5 text-center">
-                        <?php if ($mas_expulsados['logo_local']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($mas_expulsados['logo_local']); ?>" 
-                                 style="width: 50px; height: 50px; object-fit: contain; margin-bottom: 10px;" alt="Logo">
-                        <?php endif; ?>
-                        <h5><?php echo htmlspecialchars($mas_expulsados['equipo_local']); ?></h5>
-                    </div>
-                    <div class="col-md-2 text-center">
-                        <h2 class="text-muted mb-0">
-                            <?php echo $mas_expulsados['goles_local']; ?>
-                            <span class="vs-separator">-</span>
-                            <?php echo $mas_expulsados['goles_visitante']; ?>
-                        </h2>
-                        <span class="badge badge-custom bg-danger">
-                            <?php echo $mas_expulsados['total_expulsiones']; ?> expulsiones
-                        </span>
-                    </div>
-                    <div class="col-md-5 text-center">
-                        <?php if ($mas_expulsados['logo_visitante']): ?>
-                            <img src="../uploads/<?php echo htmlspecialchars($mas_expulsados['logo_visitante']); ?>" 
-                                 style="width: 50px; height: 50px; object-fit: contain; margin-bottom: 10px;" alt="Logo">
-                        <?php endif; ?>
-                        <h5><?php echo htmlspecialchars($mas_expulsados['equipo_visitante']); ?></h5>
+            <div class="row">
+                <?php 
+                $estadisticas_partidos = [];
+                if ($mayor_goleada) {
+                    $estadisticas_partidos[] = [
+                        'icono' => 'fa-bolt',
+                        'color' => 'warning',
+                        'titulo' => 'Mayor Goleada',
+                        'valor' => $mayor_goleada['goles_local'] . ' - ' . $mayor_goleada['goles_visitante'],
+                        'nombre' => $mayor_goleada['equipo_ganador'] . ' vs ' . $mayor_goleada['equipo_perdedor'],
+                        'detalle' => 'Diferencia: ' . $mayor_goleada['diferencia'] . ' goles',
+                        'fecha' => date('d/m/Y', strtotime($mayor_goleada['fecha_partido'])),
+                        'cancha' => $mayor_goleada['cancha'],
+                        'logo' => $mayor_goleada['logo_ganador']
+                    ];
+                }
+                if ($mas_goles_partido_total) {
+                    $estadisticas_partidos[] = [
+                        'icono' => 'fa-trophy',
+                        'color' => 'success',
+                        'titulo' => 'Partido con Más Goles',
+                        'valor' => $mas_goles_partido_total['goles_local'] . ' - ' . $mas_goles_partido_total['goles_visitante'],
+                        'nombre' => $mas_goles_partido_total['equipo_local'] . ' vs ' . $mas_goles_partido_total['equipo_visitante'],
+                        'detalle' => 'Total: ' . $mas_goles_partido_total['total_goles'] . ' goles',
+                        'fecha' => date('d/m/Y', strtotime($mas_goles_partido_total['fecha_partido'])),
+                        'cancha' => $mas_goles_partido_total['cancha'],
+                        'logo' => $mas_goles_partido_total['logo_local']
+                    ];
+                }
+                if ($mas_expulsados) {
+                    $estadisticas_partidos[] = [
+                        'icono' => 'fa-exclamation-triangle',
+                        'color' => 'danger',
+                        'titulo' => 'Partido con Más Expulsiones',
+                        'valor' => $mas_expulsados['goles_local'] . ' - ' . $mas_expulsados['goles_visitante'],
+                        'nombre' => $mas_expulsados['equipo_local'] . ' vs ' . $mas_expulsados['equipo_visitante'],
+                        'detalle' => $mas_expulsados['total_expulsiones'] . ' expulsiones',
+                        'fecha' => date('d/m/Y', strtotime($mas_expulsados['fecha_partido'])),
+                        'cancha' => null,
+                        'logo' => $mas_expulsados['logo_local']
+                    ];
+                }
+                foreach ($estadisticas_partidos as $index => $stat): ?>
+                <div class="col-md-12">
+                    <div class="top-goleador-item">
+                        <div class="d-flex align-items-center flex-grow-1">
+                            <div class="medal-icon">
+                                <i class="fas <?php echo $stat['icono']; ?> text-<?php echo $stat['color']; ?>" style="font-size: 1.8rem;"></i>
+                            </div>
+                            <?php if ($stat['logo']): ?>
+                                <img src="../uploads/<?php echo htmlspecialchars($stat['logo']); ?>" 
+                                     style="width: 45px; height: 45px; object-fit: contain; margin-right: 15px; border-radius: 8px; background: #f8f9fa; padding: 4px;" alt="Logo">
+                            <?php endif; ?>
+                            <div>
+                                <h5 class="mb-1 fw-bold"><?php echo htmlspecialchars($stat['nombre']); ?></h5>
+                                <small class="text-muted">
+                                    <?php echo htmlspecialchars($stat['titulo']); ?>
+                                    <?php if ($stat['fecha']): ?>
+                                        | <i class="fas fa-calendar"></i> <?php echo $stat['fecha']; ?>
+                                    <?php endif; ?>
+                                    <?php if ($stat['cancha']): ?>
+                                        | <i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($stat['cancha']); ?>
+                                    <?php endif; ?>
+                                </small>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <h3 class="mb-0 text-<?php echo $stat['color']; ?> fw-bold">
+                                <?php echo $stat['valor']; ?>
+                            </h3>
+                            <small class="text-muted"><?php echo $stat['detalle']; ?></small>
+                        </div>
                     </div>
                 </div>
-                <p class="text-center text-muted mt-3 mb-0">
-                    <i class="fas fa-calendar"></i> <?php echo date('d/m/Y', strtotime($mas_expulsados['fecha_partido'])); ?>
-                </p>
+                <?php endforeach; ?>
             </div>
-            <?php endif; ?>
-        </div>
-
-        <!-- Botón para volver -->
-        <div class="text-center mb-4">
-            <a href="../index.php" class="btn btn-lg btn-primary">
-                <i class="fas fa-arrow-left"></i> Volver al Inicio
-            </a>
         </div>
     </div>
 
@@ -840,8 +895,8 @@ $campeonatos = $db->query($query_campeonatos)->fetchAll();
         <div class="container">
             <div class="row">
                 <div class="col-md-6">
-                    <h5><i class="fas fa-futbol"></i> Sistema de Campeonatos</h5>
-                    <p class="text-muted mb-0">Gestión completa de torneos de fútbol</p>
+                    <h5><i class="fas fa-futbol"></i> Liga Altos del Paracao</h5>
+                    <p class="text-muted mb-0">Estadísticas históricas y récords</p>
                 </div>
                 <div class="col-md-6 text-md-end">
                     <p class="text-muted mb-0">© <?php echo date('Y'); ?> Todos los derechos reservados</p>

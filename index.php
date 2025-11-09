@@ -611,9 +611,33 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
                                     } elseif ($partido['tiempo_actual'] === 'finalizado') {
                                         echo 'Finalizado';
                                     } else {
-                                        $minuto = $partido['minuto_periodo'] ?? 0;
-                                        $periodo = ($partido['tiempo_actual'] === 'primer_tiempo') ? '1°T' : '2°T';
-                                        echo $minuto . "' " . $periodo;
+                                        // Calcular tiempo igual que en partido_live.php
+                                        $segundosTotales = (int)($partido['segundos_transcurridos'] ?? 0);
+                                        $tiempoActual = $partido['tiempo_actual'] ?? '';
+                                        
+                                        // Determinar segundos de inicio del período actual
+                                        // En segundo_tiempo, siempre se resta 1800 segundos (30 min del 1°T)
+                                        $segundosInicioPeriodo = 0;
+                                        if ($tiempoActual === 'segundo_tiempo') {
+                                            $segundosInicioPeriodo = 1800; // El primer tiempo siempre dura 30 minutos
+                                        }
+                                        
+                                        // Calcular tiempo transcurrido en el período actual (debe arrancar desde 0 en el 2°T)
+                                        $transcurrido = max(0, $segundosTotales - $segundosInicioPeriodo);
+                                        $mins = floor($transcurrido / 60);
+                                        $secs = $transcurrido % 60;
+                                        
+                                        // Formato igual que partido_live.php
+                                        if ($transcurrido <= 1800) { // 30 minutos = 1800 segundos
+                                            $texto = str_pad($mins, 2, '0', STR_PAD_LEFT) . ':' . str_pad($secs, 2, '0', STR_PAD_LEFT);
+                                        } else {
+                                            $minutosExtra = $mins - 30;
+                                            $texto = "30'" . ($minutosExtra > 0 ? '+' . $minutosExtra : '') . "'";
+                                        }
+                                        
+                                        // Agregar período
+                                        $periodo = ($tiempoActual === 'primer_tiempo') ? ' 1°T' : ' 2°T';
+                                        echo $texto . $periodo;
                                     }
                                 ?>
                             </div>
@@ -793,9 +817,40 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
                         } else if (partido.tiempo_actual === 'finalizado') {
                             texto = 'Finalizado';
                         } else {
-                            const minuto = partido.minuto_periodo || 0;
-                            const periodo = (partido.tiempo_actual === 'primer_tiempo') ? '1°T' : '2°T';
-                            texto = minuto + "' " + periodo;
+                            // Calcular tiempo igual que en partido_live.php
+                            const segundosTotales = parseInt(partido.segundos_transcurridos) || 0;
+                            const tiempoActual = partido.tiempo_actual || '';
+                            
+                            // Determinar segundos de inicio del período actual
+                            // En partido_live.php: 
+                            // - primer_tiempo: segundosInicioPeriodo = 0
+                            // - segundo_tiempo: segundosInicioPeriodo = segundosCronometro cuando comenzó el 2°T (aprox 1800)
+                            // Y minuto_periodo se calcula como: min(30, floor((segundos - 1800) / 60)) para segundo_tiempo
+                            let segundosInicioPeriodo = 0;
+                            if (tiempoActual === 'segundo_tiempo') {
+                                // El segundo tiempo arranca desde 0
+                                // En partido_live.php se calcula: minuto_periodo = min(30, floor((segundos - 1800) / 60))
+                                // Esto significa que se resta 1800 segundos (30 min del 1°T) antes de calcular
+                                // Así que: transcurrido = segundosTotales - 1800
+                                segundosInicioPeriodo = 1800; // El primer tiempo siempre dura 30 minutos (1800 seg)
+                            }
+                            
+                            // Calcular tiempo transcurrido en el período actual (debe arrancar desde 0 en el 2°T)
+                            const transcurrido = Math.max(0, segundosTotales - segundosInicioPeriodo);
+                            const mins = Math.floor(transcurrido / 60);
+                            const secs = transcurrido % 60;
+                            
+                            // Formato igual que partido_live.php
+                            if (transcurrido <= 1800) { // 30 minutos = 1800 segundos
+                                texto = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+                            } else {
+                                const minutosExtra = mins - 30;
+                                texto = `30'${minutosExtra > 0 ? '+' + minutosExtra : ''}'`;
+                            }
+                            
+                            // Agregar período
+                            const periodo = (tiempoActual === 'primer_tiempo') ? ' 1°T' : ' 2°T';
+                            texto += periodo;
                         }
                         timerDisplay.textContent = texto;
                     }
