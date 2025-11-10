@@ -130,16 +130,23 @@ function obtenerEventosPorPartido($partido_id, $db) {
     $eventos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // Calcular período basado en minuto
+    // Los eventos se guardan con offset:
+    // Primer tiempo: minuto = minuto_periodo (1-30)
+    // Segundo tiempo: minuto = minuto_periodo + 30 (31-60)
     foreach ($eventos as &$e) {
         $min = (int)$e['minuto'];
-        if ($min >= 1 && $min <= 45) {
-            $e['periodo'] = "1ºT";
-        } elseif ($min >= 46 && $min <= 90) {
-            $e['periodo'] = "2ºT";
-        } elseif ($min > 90) {
+        if ($min >= 1 && $min <= 30) {
+            $e['periodo'] = "1°T";
+            $e['minuto_display'] = $min; // Minuto del período
+        } elseif ($min >= 31 && $min <= 60) {
+            $e['periodo'] = "2°T";
+            $e['minuto_display'] = $min - 30; // Minuto del período (sin offset)
+        } elseif ($min > 60) {
             $e['periodo'] = "ET";
+            $e['minuto_display'] = $min;
         } else {
             $e['periodo'] = "";
+            $e['minuto_display'] = $min;
         }
     }
     return $eventos;
@@ -244,6 +251,22 @@ if (!empty($_GET['ajax'])) {
             WHERE estado = 'en_curso'
         ");
         $partidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Calcular segundos del período para cada partido (igual que en index.php)
+        foreach ($partidos as &$p) {
+            $tiempo_actual = $p['tiempo_actual'] ?? '';
+            $segundos_totales = (int)($p['segundos_transcurridos'] ?? 0);
+            $minuto_periodo = (int)($p['minuto_periodo'] ?? 0);
+            
+            if ($tiempo_actual === 'primer_tiempo') {
+                $p['segundos_periodo'] = $segundos_totales % 60;
+            } elseif ($tiempo_actual === 'segundo_tiempo') {
+                $p['segundos_periodo'] = $segundos_totales % 60;
+            } else {
+                $p['segundos_periodo'] = 0;
+            }
+        }
+        unset($p);
         
         echo json_encode($partidos);
         exit;
@@ -597,9 +620,11 @@ if (!empty($_GET['ajax'])) {
                                                         if ($evento['tipo_evento'] === 'gol') $icono = '⚽';
                                                         elseif ($evento['tipo_evento'] === 'amarilla') $icono = '🟨';
                                                         elseif ($evento['tipo_evento'] === 'roja') $icono = '🟥';
+                                                        // Usar minuto_display si está disponible (ya calculado con offset), sino usar minuto
+                                                        $minutoDisplay = isset($evento['minuto_display']) ? $evento['minuto_display'] : $evento['minuto'];
                                                     ?>
                                                     <span class="event-badge event-<?= $evento['tipo_evento'] ?>" title="<?= htmlspecialchars($evento['apellido_nombre']) ?>">
-                                                        <?= $icono ?> <?= htmlspecialchars($evento['apellido_nombre']) ?> <?= $evento['minuto'] ?>' <?= $evento['periodo'] ?>
+                                                        <?= $icono ?> <?= htmlspecialchars($evento['apellido_nombre']) ?> <?= $minutoDisplay ?>' <?= $evento['periodo'] ?>
                                                     </span>
                                                     <?php endforeach; ?>
                                                 </div>
@@ -619,31 +644,17 @@ if (!empty($_GET['ajax'])) {
                                                         } elseif (($partido['tiempo_actual'] ?? '') === 'finalizado') {
                                                             echo 'Finalizado';
                                                         } else {
-                                                            // Calcular tiempo igual que en partido_live.php
-                                                            $segundosTotales = (int)($partido['segundos_transcurridos'] ?? 0);
-                                                            $tiempoActual = $partido['tiempo_actual'] ?? '';
+                                                            // Usar minuto_periodo del servidor (calculado correctamente en partido_live.php)
                                                             $minutoPeriodo = (int)($partido['minuto_periodo'] ?? 0);
+                                                            $tiempoActual = $partido['tiempo_actual'] ?? '';
+                                                            $segundosTotales = (int)($partido['segundos_transcurridos'] ?? 0);
+                                                            $secs = $segundosTotales % 60;
                                                             
-                                                            // Calcular tiempo transcurrido en el período actual
-                                                            if ($tiempoActual === 'primer_tiempo') {
-                                                                $transcurrido = $segundosTotales;
-                                                            } else if ($tiempoActual === 'segundo_tiempo') {
-                                                                // El servidor calcula minuto_periodo como: min(30, floor((segundos - 1800) / 60))
-                                                                // Esto asume que el primer tiempo duró 1800 segundos
-                                                                // Para ser consistente, usamos la misma lógica:
-                                                                $transcurrido = max(0, $segundosTotales - 1800);
+                                                            // Formato igual que partido_live.php: mostrar MM:SS
+                                                            if ($minutoPeriodo <= 30) {
+                                                                $texto = str_pad($minutoPeriodo, 2, '0', STR_PAD_LEFT) . ':' . str_pad($secs, 2, '0', STR_PAD_LEFT);
                                                             } else {
-                                                                $transcurrido = 0;
-                                                            }
-                                                            
-                                                            $mins = floor($transcurrido / 60);
-                                                            $secs = $transcurrido % 60;
-                                                            
-                                                            // Formato igual que partido_live.php
-                                                            if ($transcurrido <= 1800) { // 30 minutos = 1800 segundos
-                                                                $texto = str_pad($mins, 2, '0', STR_PAD_LEFT) . ':' . str_pad($secs, 2, '0', STR_PAD_LEFT);
-                                                            } else {
-                                                                $minutosExtra = $mins - 30;
+                                                                $minutosExtra = $minutoPeriodo - 30;
                                                                 $texto = "30'" . ($minutosExtra > 0 ? '+' . $minutosExtra : '') . "'";
                                                             }
                                                             
@@ -679,9 +690,11 @@ if (!empty($_GET['ajax'])) {
                                                         if ($evento['tipo_evento'] === 'gol') $icono = '⚽';
                                                         elseif ($evento['tipo_evento'] === 'amarilla') $icono = '🟨';
                                                         elseif ($evento['tipo_evento'] === 'roja') $icono = '🟥';
+                                                        // Usar minuto_display si está disponible (ya calculado con offset), sino usar minuto
+                                                        $minutoDisplay = isset($evento['minuto_display']) ? $evento['minuto_display'] : $evento['minuto'];
                                                     ?>
                                                     <span class="event-badge event-<?= $evento['tipo_evento'] ?>" title="<?= htmlspecialchars($evento['apellido_nombre']) ?>">
-                                                        <?= $icono ?> <?= htmlspecialchars($evento['apellido_nombre']) ?> <?= $evento['minuto'] ?>' <?= $evento['periodo'] ?>
+                                                        <?= $icono ?> <?= htmlspecialchars($evento['apellido_nombre']) ?> <?= $minutoDisplay ?>' <?= $evento['periodo'] ?>
                                                     </span>
                                                     <?php endforeach; ?>
                                                 </div>
@@ -932,29 +945,16 @@ if (!empty($_GET['ajax'])) {
                         } else if (p.tiempo_actual === 'finalizado') {
                             tiempoDisplay = 'Finalizado';
                         } else {
-                            const segundosTotales = parseInt(p.segundos_transcurridos) || 0;
-                            const tiempoActual = p.tiempo_actual || '';
+                            // Usar minuto_periodo del servidor (calculado correctamente en partido_live.php)
                             const minutoPeriodo = parseInt(p.minuto_periodo) || 0;
+                            const tiempoActual = p.tiempo_actual || '';
+                            const segundosPeriodo = parseInt(p.segundos_periodo) || 0;
                             
-                            // Calcular tiempo transcurrido en el período actual
-                            let transcurrido = 0;
-                            if (tiempoActual === 'primer_tiempo') {
-                                transcurrido = segundosTotales;
-                            } else if (tiempoActual === 'segundo_tiempo') {
-                                // El servidor calcula minuto_periodo como: min(30, floor((segundos - 1800) / 60))
-                                // Esto asume que el primer tiempo duró 1800 segundos
-                                // Para ser consistente, usamos la misma lógica:
-                                transcurrido = Math.max(0, segundosTotales - 1800);
-                            }
-                            
-                            const mins = Math.floor(transcurrido / 60);
-                            const secs = transcurrido % 60;
-                            
-                            // Formato igual que partido_live.php
-                            if (transcurrido <= 1800) { // 30 minutos = 1800 segundos
-                                tiempoDisplay = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+                            // Formato igual que partido_live.php: mostrar MM:SS
+                            if (minutoPeriodo <= 30) {
+                                tiempoDisplay = String(minutoPeriodo).padStart(2, '0') + ':' + String(segundosPeriodo).padStart(2, '0');
                             } else {
-                                const minutosExtra = mins - 30;
+                                const minutosExtra = minutoPeriodo - 30;
                                 tiempoDisplay = `30'${minutosExtra > 0 ? '+' + minutosExtra : ''}'`;
                             }
                             
@@ -1041,14 +1041,27 @@ if (!empty($_GET['ajax'])) {
                         else if (e.tipo_evento === 'amarilla') { icono = '🟨'; clase = 'event-amarilla'; }
                         else if (e.tipo_evento === 'roja') { icono = '🟥'; clase = 'event-roja'; }
 
-                        // Calcular período en JS
-                        let periodo = '';
-                        const min = parseInt(e.minuto);
-                        if (min >= 1 && min <= 45) periodo = "1ºT";
-                        else if (min >= 46 && min <= 90) periodo = "2ºT";
-                        else if (min > 90) periodo = "ET";
+                        // Usar minuto_display y periodo si están disponibles (ya calculados con offset)
+                        // Si no están disponibles, calcular desde minuto
+                        let minutoDisplay = e.minuto_display !== undefined ? e.minuto_display : e.minuto;
+                        let periodo = e.periodo || '';
+                        
+                        if (!periodo) {
+                            // Calcular período desde minuto si no está disponible
+                            const min = parseInt(e.minuto);
+                            if (min >= 1 && min <= 30) {
+                                periodo = "1°T";
+                                minutoDisplay = min;
+                            } else if (min >= 31 && min <= 60) {
+                                periodo = "2°T";
+                                minutoDisplay = min - 30;
+                            } else if (min > 60) {
+                                periodo = "ET";
+                                minutoDisplay = min;
+                            }
+                        }
 
-                        const eventoStr = `${icono} ${e.apellido_nombre} ${e.minuto}' ${periodo}`;
+                        const eventoStr = `${icono} ${e.apellido_nombre} ${minutoDisplay}' ${periodo}`;
                         const eventoHtml = `<span class="event-badge ${clase}" title="${e.apellido_nombre}">${eventoStr}</span>`;
 
                         if (e.equipo_id == partido.equipo_local_id) {
@@ -1086,30 +1099,16 @@ if (!empty($_GET['ajax'])) {
                             } else if (partido.tiempo_actual === 'finalizado') {
                                 texto = 'Finalizado';
                             } else {
-                                // Calcular tiempo igual que en partido_live.php
-                                const segundosTotales = parseInt(partido.segundos_transcurridos) || 0;
-                                const tiempoActual = partido.tiempo_actual || '';
+                                // Usar minuto_periodo del servidor (calculado correctamente en partido_live.php)
                                 const minutoPeriodo = parseInt(partido.minuto_periodo) || 0;
+                                const tiempoActual = partido.tiempo_actual || '';
+                                const segundosPeriodo = parseInt(partido.segundos_periodo) || 0;
                                 
-                                // Calcular tiempo transcurrido en el período actual
-                                let transcurrido = 0;
-                                if (tiempoActual === 'primer_tiempo') {
-                                    transcurrido = segundosTotales;
-                                } else if (tiempoActual === 'segundo_tiempo') {
-                                    // El servidor calcula minuto_periodo como: min(30, floor((segundos - 1800) / 60))
-                                    // Esto asume que el primer tiempo duró 1800 segundos
-                                    // Para ser consistente, usamos la misma lógica:
-                                    transcurrido = Math.max(0, segundosTotales - 1800);
-                                }
-                                
-                                const mins = Math.floor(transcurrido / 60);
-                                const secs = transcurrido % 60;
-                                
-                                // Formato igual que partido_live.php
-                                if (transcurrido <= 1800) { // 30 minutos = 1800 segundos
-                                    texto = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+                                // Formato igual que partido_live.php: mostrar MM:SS
+                                if (minutoPeriodo <= 30) {
+                                    texto = String(minutoPeriodo).padStart(2, '0') + ':' + String(segundosPeriodo).padStart(2, '0');
                                 } else {
-                                    const minutosExtra = mins - 30;
+                                    const minutosExtra = minutoPeriodo - 30;
                                     texto = `30'${minutosExtra > 0 ? '+' + minutosExtra : ''}'`;
                                 }
                                 

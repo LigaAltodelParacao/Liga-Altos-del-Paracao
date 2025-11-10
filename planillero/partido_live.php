@@ -75,31 +75,89 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ajax_action'])) {
             $nuevo_estado = $_POST['nuevo_estado'];
             $tiempo_actual = $_POST['tiempo_actual'];
             $segundos = (int)$_POST['segundos'];
+            // El cliente envía el minuto_periodo calculado correctamente usando segundosInicioPeriodo
+            $minuto_periodo_cliente = isset($_POST['minuto_periodo']) ? (int)$_POST['minuto_periodo'] : null;
+            
+            // Obtener el estado actual del partido
+            $stmt = $db->prepare("SELECT tiempo_actual, segundos_transcurridos, minuto_periodo FROM partidos WHERE id = ?");
+            $stmt->execute([$partido_id]);
+            $partido_actual = $stmt->fetch(PDO::FETCH_ASSOC);
+            $tiempo_anterior = $partido_actual['tiempo_actual'] ?? '';
+            $segundos_anteriores = (int)($partido_actual['segundos_transcurridos'] ?? 0);
+            
+            // Usar minuto_periodo del cliente si está disponible (ya calculado correctamente usando segundosInicioPeriodo)
+            // El cliente calcula correctamente el minuto_periodo basándose en segundosCronometro - segundosInicioPeriodo
+            if ($minuto_periodo_cliente !== null && $minuto_periodo_cliente !== '') {
+                $minuto_periodo = $minuto_periodo_cliente;
+            } else {
+                // Si el cliente no envía minuto_periodo, calcularlo desde el estado
+                if ($tiempo_actual === 'primer_tiempo') {
+                    $minuto_periodo = min(30, floor($segundos / 60));
+                } elseif ($tiempo_actual === 'segundo_tiempo') {
+                    if ($tiempo_anterior === 'descanso') {
+                        // Iniciando segundo tiempo: minuto_periodo empieza en 0
+                        $minuto_periodo = 0;
+                    } else {
+                        // Segundo tiempo en curso: usar minuto_periodo anterior + incremento desde último update
+                        $minuto_periodo_anterior = (int)($partido_actual['minuto_periodo'] ?? 0);
+                        $segundos_aumentados = max(0, $segundos - $segundos_anteriores);
+                        $minuto_periodo = min(30, $minuto_periodo_anterior + floor($segundos_aumentados / 60));
+                    }
+                } else {
+                    $minuto_periodo = 0;
+                }
+            }
             
             // Calcular minuto total (para stats)
             $minuto_total = floor($segundos / 60);
             
-            // Calcular minuto dentro del período actual
-            $minuto_periodo = 0;
-            if ($tiempo_actual === 'primer_tiempo') {
-                $minuto_periodo = min(30, floor($segundos / 60)); // Máximo 30
-            } elseif ($tiempo_actual === 'segundo_tiempo') {
-                $minuto_periodo = min(30, floor(($segundos - 1800) / 60)); // 0-30
-            } elseif ($tiempo_actual === 'descanso' || $tiempo_actual === 'finalizado') {
-                $minuto_periodo = 0;
+            // IMPORTANTE: Cuando iniciamos el segundo tiempo, mantenemos segundos_transcurridos como el tiempo del primer tiempo
+            // Esto nos permite calcular correctamente el minuto_periodo más adelante
+            // Cuando el segundo tiempo avanza, segundos_transcurridos aumenta desde ese valor base
+            if ($tiempo_actual === 'segundo_tiempo' && $tiempo_anterior === 'descanso') {
+                // Iniciando segundo tiempo: mantener segundos_transcurridos como el tiempo del primer tiempo
+                // El tiempo recibido (segundos) es el tiempo del primer tiempo (no ha cambiado desde descanso)
+                // Mantenemos ese valor para poder calcular minuto_periodo correctamente cuando el segundo tiempo avance
+                $segundos_para_guardar = $segundos; // Mantener el tiempo del primer tiempo
+                $minuto_periodo = 0; // Asegurar que minuto_periodo = 0 al inicio del segundo tiempo
+            } else {
+                // Para otros casos, actualizar segundos_transcurridos normalmente
+                $segundos_para_guardar = $segundos;
             }
             
             $stmt = $db->prepare("UPDATE partidos SET estado = ?, tiempo_actual = ?, segundos_transcurridos = ?, minuto_actual = ?, minuto_periodo = ? WHERE id = ?");
-            $stmt->execute([$nuevo_estado, $tiempo_actual, $segundos, $minuto_total, $minuto_periodo, $partido_id]);
+            $stmt->execute([$nuevo_estado, $tiempo_actual, $segundos_para_guardar, $minuto_total, $minuto_periodo, $partido_id]);
             
-            echo json_encode(['success' => true]);
+            echo json_encode(['success' => true, 'minuto_periodo' => $minuto_periodo]);
             exit;
         }
         
         if ($action == 'guardar_evento') {
             $jugador_id = (int)$_POST['jugador_id'];
             $tipo_evento = $_POST['tipo_evento'];
-            $minuto = (int)$_POST['minuto'];
+            
+            // Obtener minuto_periodo y tiempo_actual del partido
+            $stmt = $db->prepare("SELECT minuto_periodo, tiempo_actual FROM partidos WHERE id = ?");
+            $stmt->execute([$partido_id]);
+            $partido_info = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // El cliente puede enviar minuto_periodo, si no viene, usar el del partido
+            if (isset($_POST['minuto_periodo'])) {
+                $minuto_periodo = (int)$_POST['minuto_periodo'];
+            } else {
+                $minuto_periodo = (int)($partido_info['minuto_periodo'] ?? 0);
+            }
+            
+            $tiempo_actual = $partido_info['tiempo_actual'] ?? '';
+            
+            // Guardar el minuto con offset para determinar el período correctamente:
+            // Primer tiempo: minuto = minuto_periodo (0-30)
+            // Segundo tiempo: minuto = minuto_periodo + 30 (31-60)
+            if ($tiempo_actual === 'segundo_tiempo') {
+                $minuto = $minuto_periodo + 30; // Offset para segundo tiempo
+            } else {
+                $minuto = $minuto_periodo; // Primer tiempo sin offset
+            }
             
             $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto) VALUES (?, ?, ?, ?)");
             $stmt->execute([$partido_id, $jugador_id, $tipo_evento, $minuto]);
@@ -720,10 +778,14 @@ document.addEventListener('DOMContentLoaded', function() {
     actualizarDisplayCronometro();
     actualizarContadoresGoles();
 	// Configurar inicio de período para mostrar el tiempo desde cero en cada tiempo
-	if (tiempoActual === 'segundo_tiempo') {
-		segundosInicioPeriodo = Math.min(segundosCronometro, 1800);
-	} else {
+	// Esto se hace después de restaurar desde localStorage, así que aquí solo establecemos valores por defecto
+	if (tiempoActual === 'primer_tiempo') {
 		segundosInicioPeriodo = 0;
+	} else if (tiempoActual === 'segundo_tiempo') {
+		// Si no se restauró desde localStorage, usar una estimación
+		if (segundosInicioPeriodo === 0) {
+			segundosInicioPeriodo = Math.min(segundosCronometro, 1800);
+		}
 	}
 	actualizarDisplayCronometro();
     
@@ -744,15 +806,51 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             segundosCronometro = segundosAcumulados + Math.floor((Date.now() - lastStartAt) / 1000);
             if (tiempoActual === 'segundo_tiempo') {
-                segundosInicioPeriodo = Math.min(segundosCronometro, 1800);
+                // Si tenemos el tiempo del primer tiempo guardado, usarlo
+                if (saved.segundosInicioPeriodo !== undefined) {
+                    segundosInicioPeriodo = parseInt(saved.segundosInicioPeriodo);
+                } else if (saved.tiempoPrimerTiempo !== undefined) {
+                    segundosInicioPeriodo = parseInt(saved.tiempoPrimerTiempo);
+                } else {
+                    // Si no está guardado, necesitamos obtenerlo desde la base de datos
+                    // Por ahora, estimar desde el tiempo actual
+                    // Si segundosCronometro > 1800, asumimos que el primer tiempo duró aproximadamente 1800 segundos
+                    // Pero esto no es exacto. Mejor: el servidor debería devolver el tiempo de inicio del segundo tiempo
+                    // Por ahora, usar una estimación conservadora
+                    segundosInicioPeriodo = Math.min(segundosCronometro, 1800);
+                }
             }
             iniciarCronometro();
+        } else if (tiempoActual === 'descanso' && saved.tiempoPrimerTiempo !== undefined) {
+            // En descanso, el tiempo del primer tiempo está guardado
+            segundosCronometro = parseInt(saved.tiempoPrimerTiempo);
+            segundosAcumulados = segundosCronometro;
         }
     } else {
         // Inicializar almacenamiento acorde al estado actual
+        if (tiempoActual === 'segundo_tiempo') {
+            // Si estamos en segundo tiempo, necesitamos el tiempo del primer tiempo
+            // Cuando el partido ya está en segundo tiempo al cargar la página,
+            // necesitamos obtener el tiempo de inicio del segundo tiempo
+            // Por defecto, estimamos que el primer tiempo duró aproximadamente 30 minutos
+            // Pero esto debería venir del servidor o calcularse correctamente
+            // Si segundosCronometro > 1800, estimar que el primer tiempo fue aproximadamente 1800
+            if (segundosInicioPeriodo === 0) {
+                segundosInicioPeriodo = Math.min(segundosCronometro, 1800);
+            }
+        } else if (tiempoActual === 'descanso') {
+            // En descanso, el tiempo del primer tiempo es segundosCronometro
+            segundosInicioPeriodo = segundosCronometro;
+        }
         segundosAcumulados = segundosCronometro;
         lastStartAt = (estadoPartido === 'en_curso' && tiempoActual !== 'descanso') ? Date.now() : null;
-        saveCronometroToStorage({ segundosAcumulados, lastStartAt, tiempoActual });
+        saveCronometroToStorage({ 
+            segundosAcumulados, 
+            lastStartAt, 
+            tiempoActual,
+            tiempoPrimerTiempo: (tiempoActual === 'descanso' || tiempoActual === 'segundo_tiempo') ? segundosCronometro : undefined,
+            segundosInicioPeriodo: segundosInicioPeriodo
+        });
         if (lastStartAt) iniciarCronometro();
     }
 });
@@ -848,6 +946,7 @@ function iniciarCronometro() {
             formData.append('nuevo_estado', 'en_curso');
             formData.append('tiempo_actual', tiempoActual);
             formData.append('segundos', segundosCronometro);
+            formData.append('minuto_periodo', getMinutoPeriodo());
             fetch('', { method: 'POST', body: formData }).catch(() => {});
         }
     }, 1000);
@@ -864,6 +963,12 @@ function detenerCronometro() {
         lastStartAt = null;
         saveCronometroToStorage({ segundosAcumulados, lastStartAt, tiempoActual });
     }
+}
+
+// Función para obtener el minuto_periodo actual
+function getMinutoPeriodo() {
+    const transcurrido = Math.max(0, segundosCronometro - segundosInicioPeriodo);
+    return Math.min(30, Math.floor(transcurrido / 60));
 }
 
 function actualizarDisplayCronometro() {
@@ -895,6 +1000,7 @@ async function controlarPartido() {
     if (!estadoPartido || estadoPartido === 'programado' || !tiempoActual || tiempoActual === 'programado') {
         console.log('Iniciando primer tiempo...');
         
+        segundosInicioPeriodo = 0;
         const exito = await cambiarEstado('en_curso', 'primer_tiempo');
         if (!exito) {
             alert('Error al iniciar el partido');
@@ -904,7 +1010,6 @@ async function controlarPartido() {
         
 		estadoPartido = 'en_curso';
 		tiempoActual = 'primer_tiempo';
-		segundosInicioPeriodo = 0;
         iniciarCronometro();
         btn.innerHTML = '<i class="fas fa-pause"></i> Fin 1° Tiempo';
         btn.className = 'btn btn-control btn-warning';
@@ -919,6 +1024,9 @@ async function controlarPartido() {
         console.log('Finalizando primer tiempo...');
         detenerCronometro();
         
+        // Guardar el tiempo del primer tiempo antes de cambiar a descanso
+        const tiempoPrimerTiempo = segundosCronometro;
+        
         const exito = await cambiarEstado('en_curso', 'descanso');
         if (!exito) {
             alert('Error al finalizar el primer tiempo');
@@ -927,7 +1035,8 @@ async function controlarPartido() {
         }
         
         tiempoActual = 'descanso';
-        saveCronometroToStorage({ segundosAcumulados, lastStartAt: null, tiempoActual });
+        // Guardar el tiempo del primer tiempo para usarlo cuando inicie el segundo tiempo
+        saveCronometroToStorage({ segundosAcumulados: tiempoPrimerTiempo, lastStartAt: null, tiempoActual, tiempoPrimerTiempo: tiempoPrimerTiempo });
         btn.innerHTML = '<i class="fas fa-play"></i> Iniciar 2° Tiempo';
         btn.className = 'btn btn-control btn-info';
         estadoSpan.textContent = 'DESCANSO';
@@ -939,9 +1048,19 @@ async function controlarPartido() {
     // Iniciar segundo tiempo
     } else if (estadoPartido === 'en_curso' && tiempoActual === 'descanso') {
         console.log('Iniciando segundo tiempo...');
-		// Reiniciar visualmente el período (mostrar desde 00:00)
-		segundosInicioPeriodo = segundosCronometro;
+		// El tiempo del primer tiempo está guardado en segundosCronometro (no ha cambiado desde descanso)
+		// IMPORTANTE: Cuando iniciamos el segundo tiempo, el reloj debe reiniciarse a 00:00
+		// segundosInicioPeriodo debe ser el tiempo cuando TERMINÓ el primer tiempo
+		// que es el tiempo actual (segundosCronometro) que no ha cambiado desde descanso
+		const tiempoPrimerTiempo = segundosCronometro; // Guardar el tiempo del primer tiempo
+		segundosInicioPeriodo = tiempoPrimerTiempo; // Este será el punto de referencia para calcular minuto_periodo
 		
+		// El reloj visual se reiniciará a 00:00 porque actualizarDisplayCronometro() calcula:
+		// transcurrido = segundosCronometro - segundosInicioPeriodo
+		// Cuando segundosCronometro = segundosInicioPeriodo, transcurrido = 0, entonces muestra 00:00
+		
+        // Enviar el estado con minuto_periodo = 0 (inicio del segundo tiempo)
+        // El servidor debe recibir segundosCronometro que es el tiempo del primer tiempo
         const exito = await cambiarEstado('en_curso', 'segundo_tiempo');
         if (!exito) {
             alert('Error al iniciar el segundo tiempo');
@@ -950,16 +1069,25 @@ async function controlarPartido() {
         }
         
         tiempoActual = 'segundo_tiempo';
-        // reanudar base de tiempo manteniendo acumulado del 1°T
+        // IMPORTANTE: No cambiamos segundosCronometro, sigue siendo el tiempo del primer tiempo
+        // El reloj se reiniciará visualmente a 00:00 porque segundosInicioPeriodo = segundosCronometro
+        // Cuando el cronómetro avance, segundosCronometro aumentará, pero el reloj mostrará:
+        // transcurrido = segundosCronometro - segundosInicioPeriodo
         lastStartAt = Date.now();
-        saveCronometroToStorage({ segundosAcumulados, lastStartAt, tiempoActual });
+        saveCronometroToStorage({ 
+            segundosAcumulados: tiempoPrimerTiempo, 
+            lastStartAt, 
+            tiempoActual, 
+            tiempoPrimerTiempo: tiempoPrimerTiempo,
+            segundosInicioPeriodo: tiempoPrimerTiempo
+        });
         iniciarCronometro();
         btn.innerHTML = '<i class="fas fa-flag-checkered"></i> Finalizar Partido';
         btn.className = 'btn btn-control btn-danger';
         estadoSpan.textContent = 'SEGUNDO TIEMPO';
         estadoSpan.className = 'badge estado-badge bg-danger';
         btn.disabled = false;
-        console.log('Segundo tiempo iniciado');
+        console.log('Segundo tiempo iniciado - segundosInicioPeriodo:', segundosInicioPeriodo, 'tiempoPrimerTiempo:', tiempoPrimerTiempo);
         return;
         
     // Finalizar partido
@@ -1076,10 +1204,15 @@ async function cambiarEstado(nuevoEstado, nuevoTiempo) {
     formData.append('ajax_action', 'cambiar_estado');
     formData.append('nuevo_estado', nuevoEstado);
     formData.append('tiempo_actual', nuevoTiempo);
-    formData.append('segundos', segundosCronometro); // ✅ Envía el total acumulado
+    
+    // IMPORTANTE: Cuando iniciamos el segundo tiempo, segundosCronometro es el tiempo del primer tiempo
+    // El servidor necesita ese valor para mantenerlo en segundos_transcurridos
+    // Cuando el segundo tiempo avanza, segundosCronometro aumenta, pero el reloj muestra desde 00:00
+    formData.append('segundos', segundosCronometro); // ✅ Envía el tiempo acumulado (primer tiempo cuando inicia 2°T)
+    formData.append('minuto_periodo', getMinutoPeriodo()); // ✅ Envía el minuto_periodo calculado (0 cuando inicia 2°T)
     
     try {
-        console.log('Cambiando estado a:', nuevoEstado, nuevoTiempo);
+        console.log('Cambiando estado a:', nuevoEstado, nuevoTiempo, 'segundos:', segundosCronometro, 'minuto_periodo:', getMinutoPeriodo());
         const response = await fetch('', {
             method: 'POST',
             body: formData
@@ -1307,13 +1440,15 @@ document.addEventListener('change', async function(e) {
         const lado = e.target.dataset.lado;
         
         if (eventoId.startsWith('new_')) {
-            const minuto = Math.floor(segundosCronometro / 60);
+            // Usar minuto_periodo, no el minuto total
+            const minutoPeriodo = getMinutoPeriodo();
             
             const formData = new FormData();
             formData.append('ajax_action', 'guardar_evento');
             formData.append('jugador_id', jugadorId);
             formData.append('tipo_evento', 'gol');
-            formData.append('minuto', minuto);
+            formData.append('minuto_periodo', minutoPeriodo);
+            formData.append('minuto', minutoPeriodo); // Mantener por compatibilidad
             
             try {
                 const response = await fetch('', {
@@ -1330,7 +1465,7 @@ document.addEventListener('change', async function(e) {
                         jugador_id: jugadorId,
                         apellido_nombre: jugador.apellido_nombre,
                         tipo_evento: 'gol',
-                        minuto: minuto,
+                        minuto: minutoPeriodo,
                         equipo_id: jugador.equipo_id
                     });
                     
@@ -1361,13 +1496,15 @@ document.addEventListener('change', async function(e) {
         const eventoId = selectJugador.dataset.eventoId;
         
         if (jugadorId && tipoTarjeta && eventoId.startsWith('new_')) {
-            const minuto = Math.floor(segundosCronometro / 60);
+            // Usar minuto_periodo, no el minuto total
+            const minutoPeriodo = getMinutoPeriodo();
             
             const formData = new FormData();
             formData.append('ajax_action', 'guardar_evento');
             formData.append('jugador_id', jugadorId);
             formData.append('tipo_evento', tipoTarjeta);
-            formData.append('minuto', minuto);
+            formData.append('minuto_periodo', minutoPeriodo);
+            formData.append('minuto', minutoPeriodo); // Mantener por compatibilidad
             
             try {
                 const response = await fetch('', {
@@ -1384,7 +1521,7 @@ document.addEventListener('change', async function(e) {
                         jugador_id: jugadorId,
                         apellido_nombre: jugador.apellido_nombre,
                         tipo_evento: tipoTarjeta,
-                        minuto: minuto,
+                        minuto: minutoPeriodo,
                         equipo_id: jugador.equipo_id
                     });
                     

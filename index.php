@@ -51,14 +51,21 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos' && !empty($_GET['partid
     
     foreach ($eventos as &$e) {
         $min = (int)$e['minuto'];
+        // Los eventos se guardan con offset:
+        // Primer tiempo: minuto = minuto_periodo (1-30)
+        // Segundo tiempo: minuto = minuto_periodo + 30 (31-60)
         if ($min >= 1 && $min <= 30) {
             $e['periodo'] = "1°T";
+            $e['minuto_display'] = $min; // Minuto del período
         } elseif ($min >= 31 && $min <= 60) {
             $e['periodo'] = "2°T";
+            $e['minuto_display'] = $min - 30; // Minuto del período (sin offset)
         } elseif ($min > 60) {
             $e['periodo'] = "ET";
+            $e['minuto_display'] = $min;
         } else {
             $e['periodo'] = "";
+            $e['minuto_display'] = $min;
         }
     }
     echo json_encode($eventos);
@@ -75,6 +82,40 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'update_minutes') {
         WHERE estado = 'en_curso'
     ");
     $partidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Calcular segundos del período para cada partido
+    // IMPORTANTE: El cálculo de segundos_periodo debe ser consistente con partido_live.php
+    // En partido_live.php, el reloj muestra: transcurrido = segundosCronometro - segundosInicioPeriodo
+    // Los segundos del período = transcurrido % 60
+    foreach ($partidos as &$p) {
+        $tiempo_actual = $p['tiempo_actual'] ?? '';
+        $segundos_totales = (int)($p['segundos_transcurridos'] ?? 0);
+        $minuto_periodo = (int)($p['minuto_periodo'] ?? 0);
+        
+        if ($tiempo_actual === 'primer_tiempo') {
+            // Primer tiempo: segundosInicioPeriodo = 0, entonces segundos_periodo = segundos_totales % 60
+            $p['segundos_periodo'] = $segundos_totales % 60;
+        } elseif ($tiempo_actual === 'segundo_tiempo') {
+            // Segundo tiempo: segundosInicioPeriodo = tiempo del primer tiempo
+            // transcurrido = segundos_totales - tiempoPrimerTiempo
+            // segundos_periodo = transcurrido % 60
+            // Como no tenemos tiempoPrimerTiempo exacto guardado, estimamos:
+            // Si minuto_periodo = X, entonces han pasado X minutos del segundo tiempo
+            // Estimar: tiempoPrimerTiempo ≈ segundos_totales - (minuto_periodo * 60 + segundos_estimados)
+            // Simplificación: usar una estimación basada en minuto_periodo
+            // Si minuto_periodo = 0, entonces segundos_totales es el tiempo del primer tiempo
+            // Si minuto_periodo > 0, estimar que tiempoPrimerTiempo ≈ 1800 (30 minutos)
+            // Entonces: transcurrido ≈ segundos_totales - 1800
+            // segundos_periodo = transcurrido % 60
+            // Pero esto no es exacto si el primer tiempo duró más o menos de 30 minutos
+            // Solución más simple: usar segundos_totales % 60 como aproximación
+            // Esto funcionará bien si el primer tiempo duró aproximadamente un múltiplo de 60 segundos
+            $p['segundos_periodo'] = $segundos_totales % 60;
+        } else {
+            $p['segundos_periodo'] = 0;
+        }
+    }
+    unset($p);
     
     echo json_encode($partidos);
     exit;
@@ -98,14 +139,21 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
     
     foreach ($eventos as &$e) {
         $min = (int)$e['minuto'];
+        // Los eventos se guardan con offset:
+        // Primer tiempo: minuto = minuto_periodo (0-30)
+        // Segundo tiempo: minuto = minuto_periodo + 30 (31-60)
         if ($min >= 1 && $min <= 30) {
             $e['periodo'] = "1°T";
+            $e['minuto_display'] = $min; // Minuto del período
         } elseif ($min >= 31 && $min <= 60) {
             $e['periodo'] = "2°T";
+            $e['minuto_display'] = $min - 30; // Minuto del período (sin offset)
         } elseif ($min > 60) {
             $e['periodo'] = "ET";
+            $e['minuto_display'] = $min;
         } else {
             $e['periodo'] = "";
+            $e['minuto_display'] = $min;
         }
     }
     
@@ -611,31 +659,17 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
                                     } elseif ($partido['tiempo_actual'] === 'finalizado') {
                                         echo 'Finalizado';
                                     } else {
-                                        // Calcular tiempo igual que en partido_live.php
-                                        $segundosTotales = (int)($partido['segundos_transcurridos'] ?? 0);
-                                        $tiempoActual = $partido['tiempo_actual'] ?? '';
+                                        // Usar minuto_periodo del servidor (calculado correctamente en partido_live.php)
                                         $minutoPeriodo = (int)($partido['minuto_periodo'] ?? 0);
+                                        $tiempoActual = $partido['tiempo_actual'] ?? '';
+                                        $segundosTotales = (int)($partido['segundos_transcurridos'] ?? 0);
+                                        $secs = $segundosTotales % 60;
                                         
-                                        // Calcular tiempo transcurrido en el período actual
-                                        if ($tiempoActual === 'primer_tiempo') {
-                                            $transcurrido = $segundosTotales;
-                                        } else if ($tiempoActual === 'segundo_tiempo') {
-                                            // El servidor calcula minuto_periodo como: min(30, floor((segundos - 1800) / 60))
-                                            // Esto asume que el primer tiempo duró 1800 segundos
-                                            // Para ser consistente, usamos la misma lógica:
-                                            $transcurrido = max(0, $segundosTotales - 1800);
+                                        // Formato igual que partido_live.php: mostrar MM:SS
+                                        if ($minutoPeriodo <= 30) {
+                                            $texto = str_pad($minutoPeriodo, 2, '0', STR_PAD_LEFT) . ':' . str_pad($secs, 2, '0', STR_PAD_LEFT);
                                         } else {
-                                            $transcurrido = 0;
-                                        }
-                                        
-                                        $mins = floor($transcurrido / 60);
-                                        $secs = $transcurrido % 60;
-                                        
-                                        // Formato igual que partido_live.php
-                                        if ($transcurrido <= 1800) { // 30 minutos = 1800 segundos
-                                            $texto = str_pad($mins, 2, '0', STR_PAD_LEFT) . ':' . str_pad($secs, 2, '0', STR_PAD_LEFT);
-                                        } else {
-                                            $minutosExtra = $mins - 30;
+                                            $minutosExtra = $minutoPeriodo - 30;
                                             $texto = "30'" . ($minutosExtra > 0 ? '+' . $minutosExtra : '') . "'";
                                         }
                                         
@@ -726,6 +760,78 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
         console.log('Mostrando eventos del partido:', partidoId);
     }
 
+    // Función para abreviar nombre del equipo
+    function abreviarEquipo(nombre) {
+        if (!nombre) return '';
+        
+        // Palabras comunes a mantener (artículos y preposiciones)
+        const palabrasComunes = ['La', 'El', 'Los', 'Las', 'De', 'Del', 'Un', 'Una'];
+        const palabras = nombre.trim().split(/\s+/);
+        
+        // Si tiene 2 palabras
+        if (palabras.length === 2) {
+            const primera = palabras[0];
+            const segunda = palabras[1];
+            
+            // Si la primera es un artículo común
+            if (palabrasComunes.includes(primera)) {
+                // Ejemplo: "La Pinguina" -> "La Ping."
+                // Si la segunda palabra tiene 7 o más caracteres, tomar 4 letras
+                if (segunda.length >= 7) {
+                    return primera + ' ' + segunda.substring(0, 4) + '.';
+                }
+                // Si tiene entre 5-6 caracteres, tomar 5 letras
+                else if (segunda.length >= 5) {
+                    return primera + ' ' + segunda.substring(0, 5) + '.';
+                }
+                return nombre;
+            } else {
+                // Ejemplo: "River Plate" -> "River P."
+                if (segunda.length > 4) {
+                    return primera + ' ' + segunda.substring(0, 4) + '.';
+                }
+                return nombre;
+            }
+        }
+        
+        // Si tiene más de 2 palabras
+        if (palabras.length > 2) {
+            const primera = palabras[0];
+            const segunda = palabras[1];
+            
+            // Si la primera es un artículo común, tomar artículo + segunda palabra abreviada
+            if (palabrasComunes.includes(primera)) {
+                // Ejemplo: "La Pinguina F.C." -> "La Ping."
+                // Si la segunda palabra tiene 7 o más caracteres, tomar 4 letras
+                if (segunda.length >= 7) {
+                    return primera + ' ' + segunda.substring(0, 4) + '.';
+                }
+                // Si tiene entre 5-6 caracteres, tomar 5 letras
+                else if (segunda.length >= 5) {
+                    return primera + ' ' + segunda.substring(0, 5) + '.';
+                }
+                return primera + ' ' + segunda;
+            } else {
+                // Ejemplo: "Club Atlético River" -> "Club At."
+                if (segunda && segunda.length > 3) {
+                    return primera + ' ' + segunda.substring(0, 3) + '.';
+                }
+                return primera + (segunda ? ' ' + segunda : '');
+            }
+        }
+        
+        // Si tiene una sola palabra
+        if (palabras.length === 1) {
+            // Abreviar si es muy larga (más de 10 caracteres)
+            if (nombre.length > 10) {
+                return nombre.substring(0, 8) + '.';
+            }
+            return nombre;
+        }
+        
+        return nombre;
+    }
+
     function cargarEventosTicker(partidoId) {
         fetch(`?ajax=eventos_ticker&partido_id=${partidoId}`)
             .then(response => response.json())
@@ -760,12 +866,18 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
                         clase = '';
                     }
 
-                    const minuto = e.minuto > 0 ? e.minuto : '?';
+                    // Usar minuto_display si está disponible (ya calculado con offset), sino usar minuto
+                    const minuto = e.minuto_display !== undefined ? e.minuto_display : (e.minuto > 0 ? e.minuto : '?');
                     const periodo = e.periodo || '';
+                    
+                    // Abreviar nombre del equipo y agregarlo entre paréntesis
+                    const equipoAbrev = e.nombre_equipo ? abreviarEquipo(e.nombre_equipo) : '';
+                    const equipoDisplay = equipoAbrev ? ` (${equipoAbrev})` : '';
+                    
                     html += `
                         <div class="ticker-event ${clase}">
                             ${icono}
-                            <span>${e.apellido_nombre} ${minuto}' ${periodo}</span>
+                            <span>${e.apellido_nombre} ${minuto}' ${periodo}${equipoDisplay}</span>
                         </div>
                     `;
                 });
@@ -821,35 +933,16 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
                         } else if (partido.tiempo_actual === 'finalizado') {
                             texto = 'Finalizado';
                         } else {
-                            // Calcular tiempo igual que en partido_live.php
-                            const segundosTotales = parseInt(partido.segundos_transcurridos) || 0;
+                            // Usar minuto_periodo del servidor (calculado correctamente en partido_live.php)
+                            const minutoPeriodo = parseInt(partido.minuto_periodo) || 0;
                             const tiempoActual = partido.tiempo_actual || '';
+                            const segundosPeriodo = parseInt(partido.segundos_periodo) || 0;
                             
-                            // Calcular tiempo transcurrido en el período actual
-                            // En partido_live.php, el cálculo es:
-                            // - primer_tiempo: transcurrido = segundosCronometro (desde 0)
-                            // - segundo_tiempo: transcurrido = segundosCronometro - segundosInicioPeriodo
-                            //   donde segundosInicioPeriodo = segundosCronometro cuando comenzó el 2°T
-                            
-                            let transcurrido = 0;
-                            if (tiempoActual === 'primer_tiempo') {
-                                // En el primer tiempo, el tiempo transcurrido es directamente segundosTotales
-                                transcurrido = segundosTotales;
-                            } else if (tiempoActual === 'segundo_tiempo') {
-                                // El servidor calcula minuto_periodo como: min(30, floor((segundos - 1800) / 60))
-                                // Esto asume que el primer tiempo duró 1800 segundos
-                                // Para ser consistente, usamos la misma lógica:
-                                transcurrido = Math.max(0, segundosTotales - 1800);
-                            }
-                            
-                            const mins = Math.floor(transcurrido / 60);
-                            const secs = transcurrido % 60;
-                            
-                            // Formato igual que partido_live.php
-                            if (transcurrido <= 1800) { // 30 minutos = 1800 segundos
-                                texto = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+                            // Formato igual que partido_live.php: mostrar MM:SS
+                            if (minutoPeriodo <= 30) {
+                                texto = String(minutoPeriodo).padStart(2, '0') + ':' + String(segundosPeriodo).padStart(2, '0');
                             } else {
-                                const minutosExtra = mins - 30;
+                                const minutosExtra = minutoPeriodo - 30;
                                 texto = `30'${minutosExtra > 0 ? '+' + minutosExtra : ''}'`;
                             }
                             
