@@ -98,6 +98,7 @@ https://raw.githubusercontent.com/LigaAltodelParacao/Liga-Altos-del-Paracao/refs
 https://raw.githubusercontent.com/LigaAltodelParacao/Liga-Altos-del-Paracao/refs/heads/main/admin/include/sanciones_functions.php
 https://raw.githubusercontent.com/LigaAltodelParacao/Liga-Altos-del-Paracao/refs/heads/main/admin/include/sidebar.php
 https://raw.githubusercontent.com/LigaAltodelParacao/Liga-Altos-del-Paracao/refs/heads/main/admin/include/zonas_functions.php
+https://raw.githubusercontent.com/LigaAltodelParacao/Liga-Altos-del-Paracao/refs/heads/main/admin/include/desempate_functions.php
 https://raw.githubusercontent.com/LigaAltodelParacao/Liga-Altos-del-Paracao/refs/heads/main/api/get_eventos.php
 https://raw.githubusercontent.com/LigaAltodelParacao/Liga-Altos-del-Paracao/refs/heads/main/api/get_eventos_partido.php
 https://raw.githubusercontent.com/LigaAltodelParacao/Liga-Altos-del-Paracao/refs/heads/main/api/get_jugadores.php
