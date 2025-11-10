@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/includes/desempate_functions.php';
 
 if (!isLoggedIn() || !hasPermission('admin')) {
     redirect('../login.php');
@@ -21,6 +22,10 @@ $stmt = $db->prepare("
 ");
 $stmt->execute([$formato_id]);
 $formato = $stmt->fetch();
+
+if (!$formato) {
+    redirect('campeonatos_zonas.php');
+}
 
 // Obtener zonas con partidos
 $stmt = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
@@ -46,18 +51,11 @@ foreach ($zonas as $zona) {
     $partidos_por_zona[$zona['id']] = $stmt->fetchAll();
 }
 
-// Obtener tabla de posiciones por zona
+// Obtener tabla de posiciones por zona CON SISTEMA DE DESEMPATE
 $tablas_por_zona = [];
 foreach ($zonas as $zona) {
-    $stmt = $db->prepare("
-        SELECT ez.*, e.nombre, e.logo
-        FROM equipos_zonas ez
-        JOIN equipos e ON ez.equipo_id = e.id
-        WHERE ez.zona_id = ?
-        ORDER BY ez.puntos DESC, ez.diferencia_gol DESC, ez.goles_favor DESC
-    ");
-    $stmt->execute([$zona['id']]);
-    $tablas_por_zona[$zona['id']] = $stmt->fetchAll();
+    // USAR EL NUEVO SISTEMA DE DESEMPATE
+    $tablas_por_zona[$zona['id']] = calcularTablaPosicionesConDesempate($zona['id'], $db);
 }
 
 // Obtener fases eliminatorias
@@ -194,6 +192,20 @@ foreach ($fases as $fase) {
             padding: 10px 20px;
             border-radius: 20px;
         }
+        .criterios-info {
+            background: #e7f3ff;
+            border-left: 4px solid #0d6efd;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+        .criterios-info ul {
+            margin-bottom: 0;
+            padding-left: 20px;
+        }
+        .criterios-info li {
+            margin: 3px 0;
+        }
     </style>
 </head>
 <body>
@@ -308,7 +320,7 @@ foreach ($fases as $fase) {
                                             <?php else: ?>
                                             <div class="text-muted">
                                                 <i class="fas fa-clock"></i>
-                                                <?php echo substr($partido['hora_partido'], 0, 5); ?>
+                                                <?php echo $partido['hora_partido'] ? substr($partido['hora_partido'], 0, 5) : 'Por definir'; ?>
                                             </div>
                                             <?php endif; ?>
                                         </div>
@@ -334,7 +346,7 @@ foreach ($fases as $fase) {
                                                     echo $partido['estado'] === 'finalizado' ? 'success' : 
                                                         ($partido['estado'] === 'en_curso' ? 'danger' : 'secondary'); 
                                                 ?>">
-                                                    <?php echo ucfirst($partido['estado']); ?>
+                                                    <?php echo ucfirst(str_replace('_', ' ', $partido['estado'])); ?>
                                                 </span>
                                             </small>
                                         </div>
@@ -350,6 +362,19 @@ foreach ($fases as $fase) {
 
                     <!-- TAB: TABLAS DE POSICIONES -->
                     <div class="tab-pane fade" id="tablas">
+                        <!-- Información sobre criterios de desempate -->
+                        <div class="criterios-info">
+                            <strong><i class="fas fa-info-circle"></i> Criterios de desempate aplicados:</strong>
+                            <ul class="mb-0 mt-2">
+                                <li><strong>1.</strong> Diferencia de goles (GF - GC)</li>
+                                <li><strong>2.</strong> Mayor cantidad de goles a favor</li>
+                                <li><strong>3.</strong> Puntos en enfrentamientos directos entre empatados</li>
+                                <li><strong>4.</strong> Diferencia de goles en enfrentamientos directos</li>
+                                <li><strong>5.</strong> Goles a favor en enfrentamientos directos</li>
+                                <li><strong>6.</strong> Fairplay (menos tarjetas)</li>
+                            </ul>
+                        </div>
+
                         <div class="row">
                             <?php foreach ($zonas as $zona): ?>
                             <div class="col-lg-6 mb-4">
@@ -382,7 +407,22 @@ foreach ($fases as $fase) {
                                             <?php 
                                             $posicion = 1;
                                             foreach ($tablas_por_zona[$zona['id']] as $equipo): 
-                                                $clasificado = $posicion <= $formato['equipos_clasifican'];
+                                                // Determinar cuántos clasifican según el tipo de clasificación
+                                                $clasifican_directos = 2; // Por defecto
+                                                switch ($formato['tipo_clasificacion']) {
+                                                    case '1_primero':
+                                                        $clasifican_directos = 1;
+                                                        break;
+                                                    case '2_primeros':
+                                                    case '2_primeros_2_mejores_terceros':
+                                                        $clasifican_directos = 2;
+                                                        break;
+                                                    case '4_primeros':
+                                                        $clasifican_directos = 4;
+                                                        break;
+                                                }
+                                                
+                                                $clasificado = ($posicion <= $clasifican_directos);
                                             ?>
                                             <tr class="<?php echo $clasificado ? 'posicion-clasificado' : ''; ?>">
                                                 <td>
@@ -428,7 +468,15 @@ foreach ($fases as $fase) {
                         <div class="alert alert-success">
                             <i class="fas fa-info-circle"></i> 
                             <strong>Clasificación:</strong> Los equipos marcados en verde clasifican a la siguiente fase.
-                            Clasifican los primeros <?php echo $formato['equipos_clasifican']; ?> de cada zona.
+                            <?php if ($formato['tipo_clasificacion'] === '1_primero'): ?>
+                                Clasifica <strong>1 equipo</strong> por zona.
+                            <?php elseif ($formato['tipo_clasificacion'] === '2_primeros'): ?>
+                                Clasifican los <strong>2 primeros</strong> de cada zona.
+                            <?php elseif ($formato['tipo_clasificacion'] === '2_primeros_2_mejores_terceros'): ?>
+                                Clasifican los <strong>2 primeros</strong> de cada zona + los <strong>2 mejores terceros</strong>.
+                            <?php elseif ($formato['tipo_clasificacion'] === '4_primeros'): ?>
+                                Clasifican los <strong>4 primeros</strong> de cada zona.
+                            <?php endif; ?>
                         </div>
                     </div>
 
@@ -460,7 +508,7 @@ foreach ($fases as $fase) {
                                     </div>
 
                                     <!-- Equipo Local -->
-                                    <div class="mb-2 p-2 border rounded <?php echo $partido['ganador_id'] == $partido['equipo_local_id'] ? 'bg-success text-white' : ''; ?>">
+                                    <div class="mb-2 p-2 border rounded <?php echo ($partido['ganador_id'] && $partido['ganador_id'] == $partido['equipo_local_id']) ? 'bg-success text-white' : ''; ?>">
                                         <div class="d-flex justify-content-between align-items-center">
                                             <div class="d-flex align-items-center">
                                                 <?php if ($partido['local_logo']): ?>
@@ -468,17 +516,17 @@ foreach ($fases as $fase) {
                                                      style="width: 30px; height: 30px; object-fit: contain; margin-right: 10px;">
                                                 <?php endif; ?>
                                                 <strong>
-                                                    <?php echo $partido['equipo_local_id'] ? htmlspecialchars($partido['local_nombre']) : $partido['origen_local']; ?>
+                                                    <?php echo $partido['equipo_local_id'] ? htmlspecialchars($partido['local_nombre']) : htmlspecialchars($partido['origen_local']); ?>
                                                 </strong>
                                             </div>
-                                            <?php if ($partido['estado'] === 'finalizado'): ?>
+                                            <?php if ($partido['estado'] === 'finalizado' && $partido['goles_local'] !== null): ?>
                                             <span class="badge bg-dark"><?php echo $partido['goles_local']; ?></span>
                                             <?php endif; ?>
                                         </div>
                                     </div>
 
                                     <!-- Equipo Visitante -->
-                                    <div class="mb-2 p-2 border rounded <?php echo $partido['ganador_id'] == $partido['equipo_visitante_id'] ? 'bg-success text-white' : ''; ?>">
+                                    <div class="mb-2 p-2 border rounded <?php echo ($partido['ganador_id'] && $partido['ganador_id'] == $partido['equipo_visitante_id']) ? 'bg-success text-white' : ''; ?>">
                                         <div class="d-flex justify-content-between align-items-center">
                                             <div class="d-flex align-items-center">
                                                 <?php if ($partido['visitante_logo']): ?>
@@ -486,10 +534,10 @@ foreach ($fases as $fase) {
                                                      style="width: 30px; height: 30px; object-fit: contain; margin-right: 10px;">
                                                 <?php endif; ?>
                                                 <strong>
-                                                    <?php echo $partido['equipo_visitante_id'] ? htmlspecialchars($partido['visitante_nombre']) : $partido['origen_visitante']; ?>
+                                                    <?php echo $partido['equipo_visitante_id'] ? htmlspecialchars($partido['visitante_nombre']) : htmlspecialchars($partido['origen_visitante']); ?>
                                                 </strong>
                                             </div>
-                                            <?php if ($partido['estado'] === 'finalizado'): ?>
+                                            <?php if ($partido['estado'] === 'finalizado' && $partido['goles_visitante'] !== null): ?>
                                             <span class="badge bg-dark"><?php echo $partido['goles_visitante']; ?></span>
                                             <?php endif; ?>
                                         </div>
@@ -516,9 +564,9 @@ foreach ($fases as $fase) {
                                             echo $partido['estado'] === 'finalizado' ? 'success' : 
                                                 ($partido['estado'] === 'programado' ? 'primary' : 'secondary'); 
                                         ?>">
-                                            <?php echo ucfirst($partido['estado']); ?>
+                                            <?php echo ucfirst(str_replace('_', ' ', $partido['estado'])); ?>
                                         </span>
-                                        <?php if ($partido['penales_local'] !== null): ?>
+                                        <?php if (isset($partido['penales_local']) && $partido['penales_local'] !== null): ?>
                                         <br><small class="text-danger">
                                             <i class="fas fa-futbol"></i> Penales: 
                                             <?php echo $partido['penales_local']; ?> - <?php echo $partido['penales_visitante']; ?>
