@@ -30,22 +30,23 @@ function calcularTablaPosicionesConDesempate($zona_id, $db) {
             ez.goles_favor,
             ez.goles_contra,
             ez.diferencia_gol,
-            -- Calcular fairplay (amarillas = 1 punto, rojas = 3 puntos)
             COALESCE((
-                SELECT COUNT(*) + (COUNT(CASE WHEN ep.tipo_evento = 'roja' THEN 1 END) * 2)
+                SELECT COUNT(*) + (SUM(CASE WHEN ep.tipo_evento = 'roja' THEN 2 ELSE 0 END))
                 FROM eventos_partido ep
                 INNER JOIN jugadores j ON ep.jugador_id = j.id
                 INNER JOIN partidos_zona pz ON ep.partido_id = pz.id
                 WHERE j.equipo_id = e.id 
-                AND pz.zona_id = ?
+                AND pz.zona_id = :zona_id_fp
                 AND ep.tipo_evento IN ('amarilla', 'roja')
             ), 0) as puntos_fairplay
         FROM equipos e
         INNER JOIN equipos_zonas ez ON e.id = ez.equipo_id
-        WHERE ez.zona_id = ?
+        WHERE ez.zona_id = :zona_id
         ORDER BY ez.posicion
     ");
-    $stmt->execute([$zona_id, $zona_id]);
+    $stmt->bindValue(':zona_id', $zona_id, PDO::PARAM_INT);
+    $stmt->bindValue(':zona_id_fp', $zona_id, PDO::PARAM_INT);
+    $stmt->execute();
     $equipos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     if (empty($equipos)) {
@@ -100,13 +101,15 @@ function aplicarCriteriosDesempate($equipos, $zona_id, $db) {
  * Desempata un grupo de equipos con los mismos puntos
  */
 function desempatarGrupo($grupo, $zona_id, $db) {
-    // Criterio 1: Diferencia de goles general
+    // Criterio 1 y 2: Diferencia de goles y goles a favor
     usort($grupo, function($a, $b) {
-        return $b['diferencia_gol'] - $a['diferencia_gol'];
+        // Primero por diferencia de goles
+        $diff_cmp = $b['diferencia_gol'] - $a['diferencia_gol'];
+        if ($diff_cmp != 0) return $diff_cmp;
+        
+        // Luego por goles a favor
+        return $b['goles_favor'] - $a['goles_favor'];
     });
-    
-    // Verificar si aún hay empate después del primer criterio
-    $grupo = verificarYDesempatarPorCriterio2($grupo);
     
     // Si todavía hay empate, aplicar criterios 3, 4 y 5 (enfrentamientos directos)
     $grupos_empatados = agruparEquiposEmpatados($grupo);
@@ -125,22 +128,6 @@ function desempatarGrupo($grupo, $zona_id, $db) {
     }
     
     return $resultado;
-}
-
-/**
- * Criterio 2: Mayor cantidad de goles a favor
- */
-function verificarYDesempatarPorCriterio2($grupo) {
-    usort($grupo, function($a, $b) {
-        // Primero por diferencia de goles
-        $diff_cmp = $b['diferencia_gol'] - $a['diferencia_gol'];
-        if ($diff_cmp != 0) return $diff_cmp;
-        
-        // Luego por goles a favor
-        return $b['goles_favor'] - $a['goles_favor'];
-    });
-    
-    return $grupo;
 }
 
 /**
@@ -172,7 +159,7 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
     $equipos_ids = array_map(function($e) { return $e['id']; }, $grupo);
     
     // Obtener todos los partidos entre estos equipos
-    $placeholders = str_repeat('?,', count($equipos_ids) - 1) . '?';
+    $placeholders = implode(',', array_fill(0, count($equipos_ids), '?'));
     $stmt = $db->prepare("
         SELECT 
             pz.id,
@@ -205,8 +192,8 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
     foreach ($partidos_directos as $partido) {
         $local_id = $partido['equipo_local_id'];
         $visitante_id = $partido['equipo_visitante_id'];
-        $goles_local = $partido['goles_local'];
-        $goles_visitante = $partido['goles_visitante'];
+        $goles_local = (int)$partido['goles_local'];
+        $goles_visitante = (int)$partido['goles_visitante'];
         
         // Actualizar goles a favor y contra
         $stats_directos[$local_id]['gf'] += $goles_local;
@@ -223,16 +210,19 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
             $stats_directos[$local_id]['puntos'] += 1;
             $stats_directos[$visitante_id]['puntos'] += 1;
         }
-        
-        // Calcular diferencia
-        $stats_directos[$local_id]['dif'] = $stats_directos[$local_id]['gf'] - $stats_directos[$local_id]['gc'];
-        $stats_directos[$visitante_id]['dif'] = $stats_directos[$visitante_id]['gf'] - $stats_directos[$visitante_id]['gc'];
     }
+    
+    // Calcular diferencia de goles
+    foreach ($stats_directos as $equipo_id => &$stats) {
+        $stats['dif'] = $stats['gf'] - $stats['gc'];
+    }
+    unset($stats); // Romper referencia
     
     // Agregar stats directos a cada equipo
     foreach ($grupo as &$equipo) {
         $equipo['stats_directos'] = $stats_directos[$equipo['id']];
     }
+    unset($equipo); // Romper la referencia
     
     // Ordenar por criterios 3, 4, 5 y 6
     usort($grupo, function($a, $b) {
@@ -259,12 +249,6 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
  * Actualiza las posiciones en la base de datos y marca clasificados
  */
 function actualizarPosiciones($equipos_ordenados, $zona_id, $db) {
-    $stmt = $db->prepare("
-        UPDATE equipos_zonas 
-        SET posicion = ?, clasificado = ?
-        WHERE zona_id = ? AND equipo_id = ?
-    ");
-    
     // Obtener cuántos clasifican de esta zona
     $stmt_formato = $db->prepare("
         SELECT cf.equipos_clasifican, cf.cantidad_zonas, cf.tipo_clasificacion
@@ -291,6 +275,13 @@ function actualizarPosiciones($equipos_ordenados, $zona_id, $db) {
                 break;
         }
     }
+    
+    // Actualizar posiciones
+    $stmt = $db->prepare("
+        UPDATE equipos_zonas 
+        SET posicion = ?, clasificado = ?
+        WHERE zona_id = ? AND equipo_id = ?
+    ");
     
     $posicion = 1;
     foreach ($equipos_ordenados as $equipo) {
@@ -330,7 +321,7 @@ function obtenerClasificadosOrdenados($formato_id, $db) {
         INNER JOIN zonas z ON ez.zona_id = z.id
         WHERE z.formato_id = ?
         AND ez.clasificado = 1
-        ORDER BY ez.posicion, ez.puntos DESC, ez.diferencia_gol DESC, ez.goles_favor DESC
+        ORDER BY ez.posicion ASC, ez.puntos DESC, ez.diferencia_gol DESC, ez.goles_favor DESC
     ");
     $stmt->execute([$formato_id]);
     
@@ -358,7 +349,7 @@ function generarBracketEliminatorio($formato_id, $db) {
     } elseif ($total_clasificados == 4) {
         $fase_inicial = 'semifinal';
     } else {
-        throw new Exception('Cantidad de clasificados no válida');
+        throw new Exception("Cantidad de clasificados no válida: {$total_clasificados}. Se esperan 4, 8 o 16 equipos.");
     }
     
     // Obtener ID de la fase inicial
@@ -370,27 +361,73 @@ function generarBracketEliminatorio($formato_id, $db) {
     $fase = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$fase) {
-        throw new Exception('Fase eliminatoria no encontrada');
+        throw new Exception("Fase eliminatoria '{$fase_inicial}' no encontrada");
     }
     
     // Generar emparejamientos (1° vs último, 2° vs penúltimo, etc.)
     $emparejamientos = [];
-    $mitad = count($clasificados) / 2;
+    $mitad = intval($total_clasificados / 2);
     
     for ($i = 0; $i < $mitad; $i++) {
+        $local = $clasificados[$i];
+        $visitante = $clasificados[$total_clasificados - 1 - $i];
+        
         $emparejamientos[] = [
             'fase_id' => $fase['id'],
             'numero_llave' => $i + 1,
-            'equipo_local_id' => $clasificados[$i]['id'],
-            'equipo_visitante_id' => $clasificados[count($clasificados) - 1 - $i]['id'],
-            'origen_local' => "{$clasificados[$i]['posicion']}° {$clasificados[$i]['zona_nombre']}",
-            'origen_visitante' => "{$clasificados[count($clasificados) - 1 - $i]['posicion']}° {$clasificados[count($clasificados) - 1 - $i]['zona_nombre']}"
+            'equipo_local_id' => $local['id'],
+            'equipo_visitante_id' => $visitante['id'],
+            'origen_local' => "{$local['posicion']}° {$local['zona_nombre']}",
+            'origen_visitante' => "{$visitante['posicion']}° {$visitante['zona_nombre']}"
         ];
     }
     
     return $emparejamientos;
 }
 
+/**
+ * Ejemplo de inserción de emparejamientos en la base de datos
+ */
+function insertarEmparejamientos($emparejamientos, $db) {
+    $stmt = $db->prepare("
+        INSERT INTO partidos_eliminatorios 
+        (fase_id, numero_llave, equipo_local_id, equipo_visitante_id, origen_local, origen_visitante)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ");
+    
+    foreach ($emparejamientos as $emp) {
+        $stmt->execute([
+            $emp['fase_id'],
+            $emp['numero_llave'],
+            $emp['equipo_local_id'],
+            $emp['equipo_visitante_id'],
+            $emp['origen_local'],
+            $emp['origen_visitante']
+        ]);
+    }
+    
+    return true;
+}
+
 // EJEMPLO DE USO:
-// $clasificados = obtenerClasificadosOrdenados($formato_id, $db);
-// $emparejamientos = generarBracketEliminatorio($formato_id, $db);
+// try {
+//     $db->beginTransaction();
+//     
+//     // Calcular tabla de una zona específica
+//     $tabla = calcularTablaPosicionesConDesempate($zona_id, $db);
+//     
+//     // Obtener todos los clasificados
+//     $clasificados = obtenerClasificadosOrdenados($formato_id, $db);
+//     
+//     // Generar bracket eliminatorio
+//     $emparejamientos = generarBracketEliminatorio($formato_id, $db);
+//     
+//     // Insertar emparejamientos
+//     insertarEmparejamientos($emparejamientos, $db);
+//     
+//     $db->commit();
+// } catch (Exception $e) {
+//     $db->rollBack();
+//     error_log("Error en sistema de desempate: " . $e->getMessage());
+//     throw $e;
+// }
