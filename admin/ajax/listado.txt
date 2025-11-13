@@ -1,0 +1,21 @@
+asignar_equipo.php
+asignar_equipo_zona.php
+eliminar_formato.php
+generar_fixture.php
+get_categorias - copia.php
+get_categorias.php
+get_equipos.php
+get_eventos.php
+get_eventos_partido.php
+get_fechas.php
+get_jugador.php
+get_jugadores.php
+get_jugadores_sanciones.php
+get_partidos.php
+get_sanciones.php
+guardar_eventos.php
+guardar_formato_zonas.php
+limpiar_equipo_zona.php
+listado.txt
+quitar_equipo_zona.php
+verificar_sistema.php
