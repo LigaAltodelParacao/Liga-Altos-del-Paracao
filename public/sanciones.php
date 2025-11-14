@@ -41,7 +41,9 @@ if ($campeonato_id) {
 ";
 
 if ($campeonato_id) {
-    $where_conditions[] = "c.campeonato_id = ?";
+    // Filtrar por campeonato_id si está disponible en sanciones, sino por categoría
+    $where_conditions[] = "(s.campeonato_id = ? OR (s.campeonato_id IS NULL AND c.campeonato_id = ?))";
+    $params[] = $campeonato_id;
     $params[] = $campeonato_id;
 }
 

@@ -16,28 +16,102 @@ $stmt->execute([$jugador_id]);
 $jugador = $stmt->fetch();
 if (!$jugador) redirect('historial_equipos.php');
 
-$stmt = $db->prepare("\n    SELECT \n        jeh.*,\n        jeh.equipo_id,\n        e.nombre as equipo_nombre,\n        e.logo as equipo_logo,\n        c.nombre as categoria_nombre,\n        camp.id as campeonato_id,\n        camp.nombre as campeonato_nombre,\n        camp.fecha_inicio as campeonato_fecha_inicio,\n        camp.fecha_fin as campeonato_fecha_fin\n    FROM jugadores_equipos_historial jeh\n    JOIN equipos e ON jeh.equipo_id = e.id\n    JOIN categorias c ON e.categoria_id = c.id\n    JOIN campeonatos camp ON c.campeonato_id = camp.id\n    WHERE jeh.jugador_dni = ?\n    ORDER BY jeh.fecha_inicio DESC, camp.fecha_inicio DESC\n");
+$stmt = $db->prepare("
+    SELECT 
+        jeh.*,
+        jeh.equipo_id,
+        e.nombre as equipo_nombre,
+        e.logo as equipo_logo,
+        c.nombre as categoria_nombre,
+        camp.id as campeonato_id,
+        camp.nombre as campeonato_nombre,
+        camp.fecha_inicio as campeonato_fecha_inicio,
+        camp.fecha_fin as campeonato_fecha_fin,
+        COALESCE(jeh.es_torneo_nocturno, camp.es_torneo_nocturno, 0) as es_torneo_nocturno
+    FROM jugadores_equipos_historial jeh
+    JOIN equipos e ON jeh.equipo_id = e.id
+    JOIN categorias c ON e.categoria_id = c.id
+    JOIN campeonatos camp ON c.campeonato_id = camp.id
+    WHERE jeh.jugador_dni = ?
+    ORDER BY jeh.fecha_inicio DESC, camp.fecha_inicio DESC
+");
 $stmt->execute([$jugador['dni']]);
 $historial = $stmt->fetchAll();
 
 // Completar estadísticas por registro del timeline (equipo + campeonato)
+// Incluye partidos normales, de zonas y eliminatorias del mismo campeonato
 foreach ($historial as $idx => $reg) {
     $equipoId = (int)($reg['equipo_id'] ?? 0);
     $campId = (int)($reg['campeonato_id'] ?? 0);
+    $esTorneoNocturno = isset($reg['es_torneo_nocturno']) && $reg['es_torneo_nocturno'];
+    
     if ($equipoId && $campId) {
         try {
             // Partidos jugados por el jugador con ese equipo en ese campeonato
-            $q = $db->prepare("\n                SELECT COUNT(DISTINCT jp.partido_id)\n                FROM jugadores_partido jp\n                JOIN partidos p ON jp.partido_id = p.id\n                JOIN fechas f ON p.fecha_id = f.id\n                WHERE jp.jugador_id = ? AND p.estado = 'finalizado'\n                  AND (p.equipo_local_id = ? OR p.equipo_visitante_id = ?)\n                  AND f.categoria_id IN (SELECT id FROM categorias WHERE campeonato_id = ?)\n            ");
-            $q->execute([$jugador_id, $equipoId, $equipoId, $campId]);
+            // Incluye partidos normales, de zonas y eliminatorias
+            $q = $db->prepare("
+                SELECT COUNT(DISTINCT jp.partido_id)
+                FROM jugadores_partido jp
+                JOIN partidos p ON jp.partido_id = p.id
+                LEFT JOIN fechas f ON p.fecha_id = f.id
+                WHERE jp.jugador_id = ? AND p.estado = 'finalizado'
+                  AND (p.equipo_local_id = ? OR p.equipo_visitante_id = ?)
+                  AND (
+                      -- Partidos normales
+                      (p.tipo_torneo = 'normal' AND f.categoria_id IN (SELECT id FROM categorias WHERE campeonato_id = ?))
+                      OR
+                      -- Partidos de zonas
+                      (p.tipo_torneo = 'zona' AND p.zona_id IN (
+                          SELECT z.id FROM zonas z
+                          JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                          WHERE cf.campeonato_id = ?
+                      ))
+                      OR
+                      -- Partidos eliminatorios
+                      (p.tipo_torneo = 'eliminatoria' AND p.fase_eliminatoria_id IN (
+                          SELECT fe.id FROM fases_eliminatorias fe
+                          JOIN campeonatos_formato cf ON fe.formato_id = cf.id
+                          WHERE cf.campeonato_id = ?
+                      ))
+                  )
+            ");
+            $q->execute([$jugador_id, $equipoId, $equipoId, $campId, $campId, $campId]);
             $historial[$idx]['partidos_jugados'] = (int)$q->fetchColumn();
 
             // Goles, Amarillas, Rojas
             $tipos = [ 'gol' => 'goles', 'amarilla' => 'amarillas', 'roja' => 'rojas' ];
             foreach ($tipos as $tipo => $key) {
-                $q2 = $db->prepare("\n                    SELECT COUNT(*)\n                    FROM eventos_partido ev\n                    JOIN partidos p ON ev.partido_id = p.id\n                    JOIN fechas f ON p.fecha_id = f.id\n                    WHERE ev.jugador_id = ? AND ev.tipo_evento = ?\n                      AND (p.equipo_local_id = ? OR p.equipo_visitante_id = ?)\n                      AND f.categoria_id IN (SELECT id FROM categorias WHERE campeonato_id = ?)\n                ");
-                $q2->execute([$jugador_id, $tipo, $equipoId, $equipoId, $campId]);
+                $q2 = $db->prepare("
+                    SELECT COUNT(*)
+                    FROM eventos_partido ev
+                    JOIN partidos p ON ev.partido_id = p.id
+                    LEFT JOIN fechas f ON p.fecha_id = f.id
+                    WHERE ev.jugador_id = ? AND ev.tipo_evento = ?
+                      AND (p.equipo_local_id = ? OR p.equipo_visitante_id = ?)
+                      AND (
+                          (p.tipo_torneo = 'normal' AND f.categoria_id IN (SELECT id FROM categorias WHERE campeonato_id = ?))
+                          OR
+                          (p.tipo_torneo = 'zona' AND p.zona_id IN (
+                              SELECT z.id FROM zonas z
+                              JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                              WHERE cf.campeonato_id = ?
+                          ))
+                          OR
+                          (p.tipo_torneo = 'eliminatoria' AND p.fase_eliminatoria_id IN (
+                              SELECT fe.id FROM fases_eliminatorias fe
+                              JOIN campeonatos_formato cf ON fe.formato_id = cf.id
+                              WHERE cf.campeonato_id = ?
+                          ))
+                          OR
+                          (ev.campeonato_id = ?)
+                      )
+                ");
+                $q2->execute([$jugador_id, $tipo, $equipoId, $equipoId, $campId, $campId, $campId, $campId]);
                 $historial[$idx][$key] = (int)$q2->fetchColumn();
             }
+            
+            // Marcar si es torneo nocturno
+            $historial[$idx]['es_torneo_nocturno'] = $esTorneoNocturno;
         } catch (Exception $e) {
             // Continuar sin romper
         }
@@ -57,40 +131,183 @@ if (!$campFiltro && !$teamFiltro) {
 $subset = $historial; $scopeLabel = 'Historial completo';
 if ($campFiltro) { $subset = array_values(array_filter($historial, fn($r) => (int)$r['campeonato_id'] === (int)$campFiltro)); foreach ($historial as $r) { if ((int)$r['campeonato_id']===(int)$campFiltro) { $scopeLabel = 'Campeonato: '.$r['campeonato_nombre']; break; } } }
 if ($teamFiltro) { $subset = array_values(array_filter($historial, fn($r) => (int)$r['equipo_id'] === (int)$teamFiltro)); foreach ($historial as $r) { if ((int)$r['equipo_id']===(int)$teamFiltro) { $scopeLabel = 'Equipo: '.$r['equipo_nombre']; break; } } }
-$dest = [
-    'partidos' => array_sum(array_column($subset, 'partidos_jugados')),
-    'goles' => array_sum(array_column($subset, 'goles')),
-    'amarillas' => array_sum(array_column($subset, 'amarillas')),
-    'rojas' => array_sum(array_column($subset, 'rojas'))
+
+// Separar estadísticas por tipo de torneo
+$dest_largos = [
+    'partidos' => 0,
+    'goles' => 0,
+    'amarillas' => 0,
+    'rojas' => 0
 ];
+$dest_zonales = [
+    'partidos' => 0,
+    'goles' => 0,
+    'amarillas' => 0,
+    'rojas' => 0
+];
+
+// Calcular desde el historial separando por tipo
+foreach ($subset as $reg) {
+    $esZonal = !empty($reg['es_torneo_nocturno']);
+    if ($esZonal) {
+        $dest_zonales['partidos'] += (int)($reg['partidos_jugados'] ?? 0);
+        $dest_zonales['goles'] += (int)($reg['goles'] ?? 0);
+        $dest_zonales['amarillas'] += (int)($reg['amarillas'] ?? 0);
+        $dest_zonales['rojas'] += (int)($reg['rojas'] ?? 0);
+    } else {
+        $dest_largos['partidos'] += (int)($reg['partidos_jugados'] ?? 0);
+        $dest_largos['goles'] += (int)($reg['goles'] ?? 0);
+        $dest_largos['amarillas'] += (int)($reg['amarillas'] ?? 0);
+        $dest_largos['rojas'] += (int)($reg['rojas'] ?? 0);
+    }
+}
+
+// Totales generales (solo para compatibilidad, pero no se mostrarán mezclados)
+$dest = [
+    'partidos' => $dest_largos['partidos'] + $dest_zonales['partidos'],
+    'goles' => $dest_largos['goles'] + $dest_zonales['goles'],
+    'amarillas' => $dest_largos['amarillas'] + $dest_zonales['amarillas'],
+    'rojas' => max($dest_largos['rojas'], $dest_zonales['rojas']) // Rojas compartidas, tomar el máximo
+];
+
 $torneos = []; $equipos = [];
 foreach ($historial as $r) { $torneos[$r['campeonato_id']] = $r['campeonato_nombre']; $equipos[$r['equipo_id']] = $r['equipo_nombre']; }
 
 // Fallback PRO: si las sumas del historial están en 0, calcular por SQL según alcance (campeonato)
+// Incluye partidos normales, de zonas y eliminatorias, SEPARADOS por tipo de torneo
 if (($dest['partidos'] + $dest['goles'] + $dest['amarillas'] + $dest['rojas']) === 0) {
     try {
-        // Partidos jugados
+        // Calcular estadísticas SEPARADAS por tipo de torneo
+        // Partidos jugados - TORNEOS LARGOS
         if ($campFiltro) {
-            $stmt = $db->prepare("\n                SELECT COUNT(DISTINCT jp.partido_id)\n                FROM jugadores_partido jp\n                JOIN partidos p ON jp.partido_id = p.id\n                JOIN fechas f ON p.fecha_id = f.id\n                WHERE jp.jugador_id = ? AND p.estado = 'finalizado'\n                  AND f.categoria_id IN (SELECT id FROM categorias WHERE campeonato_id = ?)\n            ");
+            $stmt = $db->prepare("
+                SELECT COUNT(DISTINCT jp.partido_id)
+                FROM jugadores_partido jp
+                JOIN partidos p ON jp.partido_id = p.id
+                LEFT JOIN fechas f ON p.fecha_id = f.id
+                LEFT JOIN categorias cat ON f.categoria_id = cat.id
+                LEFT JOIN campeonatos camp ON cat.campeonato_id = camp.id
+                WHERE jp.jugador_id = ? AND p.estado = 'finalizado'
+                  AND camp.id = ? AND (camp.tipo_campeonato = 'largo' OR camp.tipo_campeonato IS NULL)
+                  AND p.tipo_torneo = 'normal'
+            ");
             $stmt->execute([$jugador_id, $campFiltro]);
         } else {
-            $stmt = $db->prepare("\n                SELECT COUNT(DISTINCT jp.partido_id)\n                FROM jugadores_partido jp\n                JOIN partidos p ON jp.partido_id = p.id\n                WHERE jp.jugador_id = ? AND p.estado = 'finalizado'\n            ");
+            $stmt = $db->prepare("
+                SELECT COUNT(DISTINCT jp.partido_id)
+                FROM jugadores_partido jp
+                JOIN partidos p ON jp.partido_id = p.id
+                LEFT JOIN fechas f ON p.fecha_id = f.id
+                LEFT JOIN categorias cat ON f.categoria_id = cat.id
+                LEFT JOIN campeonatos camp ON cat.campeonato_id = camp.id
+                WHERE jp.jugador_id = ? AND p.estado = 'finalizado'
+                  AND (camp.tipo_campeonato = 'largo' OR camp.tipo_campeonato IS NULL)
+                  AND p.tipo_torneo = 'normal'
+            ");
             $stmt->execute([$jugador_id]);
         }
-        $dest['partidos'] = (int)$stmt->fetchColumn();
+        $dest_largos['partidos'] = (int)$stmt->fetchColumn();
 
-        // Contadores de eventos
+        // Partidos jugados - TORNEOS ZONALES
+        if ($campFiltro) {
+            $stmt = $db->prepare("
+                SELECT COUNT(DISTINCT jp.partido_id)
+                FROM jugadores_partido jp
+                JOIN partidos p ON jp.partido_id = p.id
+                LEFT JOIN fechas f ON p.fecha_id = f.id
+                LEFT JOIN zonas z ON p.zona_id = z.id
+                LEFT JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                LEFT JOIN campeonatos camp ON cf.campeonato_id = camp.id
+                WHERE jp.jugador_id = ? AND p.estado = 'finalizado'
+                  AND camp.id = ? AND camp.tipo_campeonato = 'zonal'
+                  AND p.tipo_torneo IN ('zona', 'eliminatoria')
+            ");
+            $stmt->execute([$jugador_id, $campFiltro]);
+        } else {
+            $stmt = $db->prepare("
+                SELECT COUNT(DISTINCT jp.partido_id)
+                FROM jugadores_partido jp
+                JOIN partidos p ON jp.partido_id = p.id
+                LEFT JOIN zonas z ON p.zona_id = z.id
+                LEFT JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                LEFT JOIN campeonatos camp ON cf.campeonato_id = camp.id
+                WHERE jp.jugador_id = ? AND p.estado = 'finalizado'
+                  AND camp.tipo_campeonato = 'zonal'
+                  AND p.tipo_torneo IN ('zona', 'eliminatoria')
+            ");
+            $stmt->execute([$jugador_id]);
+        }
+        $dest_zonales['partidos'] = (int)$stmt->fetchColumn();
+
+        // Contadores de eventos SEPARADOS por tipo de torneo
         $tipos = ['gol' => 'goles', 'amarilla' => 'amarillas', 'roja' => 'rojas'];
         foreach ($tipos as $tipo => $key) {
+            // TORNEOS LARGOS
             if ($campFiltro) {
-                $stmt = $db->prepare("\n                    SELECT COUNT(*)\n                    FROM eventos_partido ev\n                    JOIN partidos p ON ev.partido_id = p.id\n                    JOIN fechas f ON p.fecha_id = f.id\n                    WHERE ev.jugador_id = ? AND ev.tipo_evento = ?\n                      AND f.categoria_id IN (SELECT id FROM categorias WHERE campeonato_id = ?)\n                ");
+                $stmt = $db->prepare("
+                    SELECT COUNT(*)
+                    FROM eventos_partido ev
+                    JOIN partidos p ON ev.partido_id = p.id
+                    LEFT JOIN fechas f ON p.fecha_id = f.id
+                    LEFT JOIN categorias cat ON f.categoria_id = cat.id
+                    LEFT JOIN campeonatos camp ON cat.campeonato_id = camp.id
+                    WHERE ev.jugador_id = ? AND ev.tipo_evento = ?
+                      AND camp.id = ? AND (camp.tipo_campeonato = 'largo' OR camp.tipo_campeonato IS NULL)
+                      AND (ev.es_torneo_zonal = 0 OR ev.es_torneo_zonal IS NULL)
+                ");
                 $stmt->execute([$jugador_id, $tipo, $campFiltro]);
             } else {
-                $stmt = $db->prepare("\n                    SELECT COUNT(*)\n                    FROM eventos_partido ev\n                    JOIN partidos p ON ev.partido_id = p.id\n                    WHERE ev.jugador_id = ? AND ev.tipo_evento = ?\n                ");
+                $stmt = $db->prepare("
+                    SELECT COUNT(*)
+                    FROM eventos_partido ev
+                    JOIN partidos p ON ev.partido_id = p.id
+                    LEFT JOIN fechas f ON p.fecha_id = f.id
+                    LEFT JOIN categorias cat ON f.categoria_id = cat.id
+                    LEFT JOIN campeonatos camp ON cat.campeonato_id = camp.id
+                    WHERE ev.jugador_id = ? AND ev.tipo_evento = ?
+                      AND (camp.tipo_campeonato = 'largo' OR camp.tipo_campeonato IS NULL)
+                      AND (ev.es_torneo_zonal = 0 OR ev.es_torneo_zonal IS NULL)
+                ");
                 $stmt->execute([$jugador_id, $tipo]);
             }
-            $dest[$key] = (int)$stmt->fetchColumn();
+            $dest_largos[$key] = (int)$stmt->fetchColumn();
+
+            // TORNEOS ZONALES
+            if ($campFiltro) {
+                $stmt = $db->prepare("
+                    SELECT COUNT(*)
+                    FROM eventos_partido ev
+                    JOIN partidos p ON ev.partido_id = p.id
+                    LEFT JOIN zonas z ON p.zona_id = z.id
+                    LEFT JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                    LEFT JOIN campeonatos camp ON cf.campeonato_id = camp.id
+                    WHERE ev.jugador_id = ? AND ev.tipo_evento = ?
+                      AND camp.id = ? AND camp.tipo_campeonato = 'zonal'
+                      AND ev.es_torneo_zonal = 1
+                ");
+                $stmt->execute([$jugador_id, $tipo, $campFiltro]);
+            } else {
+                $stmt = $db->prepare("
+                    SELECT COUNT(*)
+                    FROM eventos_partido ev
+                    JOIN partidos p ON ev.partido_id = p.id
+                    LEFT JOIN zonas z ON p.zona_id = z.id
+                    LEFT JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                    LEFT JOIN campeonatos camp ON cf.campeonato_id = camp.id
+                    WHERE ev.jugador_id = ? AND ev.tipo_evento = ?
+                      AND camp.tipo_campeonato = 'zonal'
+                      AND ev.es_torneo_zonal = 1
+                ");
+                $stmt->execute([$jugador_id, $tipo]);
+            }
+            $dest_zonales[$key] = (int)$stmt->fetchColumn();
         }
+
+        // Para rojas, tomar el máximo (compartidas entre ambos tipos)
+        $dest['rojas'] = max($dest_largos['rojas'], $dest_zonales['rojas']);
+        $dest['partidos'] = $dest_largos['partidos'] + $dest_zonales['partidos'];
+        $dest['goles'] = $dest_largos['goles'] + $dest_zonales['goles'];
+        $dest['amarillas'] = $dest_largos['amarillas'] + $dest_zonales['amarillas'];
     } catch (Exception $e) {
         // En caso de error, mantener valores en 0 silenciosamente
     }
@@ -175,17 +392,33 @@ img,.rounded-circle{width:50px!important;height:50px!important}
     </div>
   </div>
 
+  <!-- Estadísticas por tipo de torneo -->
   <div class="card border-0 shadow-sm mb-3">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
-      <h6 class="mb-0"><i class="fas fa-chart-line"></i> Estadísticas destacadas</h6>
+      <h6 class="mb-0"><i class="fas fa-trophy"></i> Campeonatos Largos</h6>
       <small class="text-muted"><?php echo htmlspecialchars($scopeLabel); ?></small>
     </div>
     <div class="card-body">
       <div class="row g-3">
-        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number"><?php echo $dest['partidos']; ?></div><div class="text-muted">Partidos</div></div></div>
-        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number text-success"><?php echo $dest['goles']; ?></div><div class="text-muted">Goles</div></div></div>
-        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number text-warning"><?php echo $dest['amarillas']; ?></div><div class="text-muted">Amarillas</div></div></div>
-        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number text-danger"><?php echo $dest['rojas']; ?></div><div class="text-muted">Rojas</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number"><?php echo $dest_largos['partidos']; ?></div><div class="text-muted">Partidos</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number text-success"><?php echo $dest_largos['goles']; ?></div><div class="text-muted">Goles</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number text-warning"><?php echo $dest_largos['amarillas']; ?></div><div class="text-muted">Amarillas</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number text-danger"><?php echo $dest_largos['rojas']; ?></div><div class="text-muted">Rojas</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <h6 class="mb-0"><i class="fas fa-moon"></i> Torneos por Zonas</h6>
+      <small class="text-muted"><?php echo htmlspecialchars($scopeLabel); ?></small>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number"><?php echo $dest_zonales['partidos']; ?></div><div class="text-muted">Partidos</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number text-success"><?php echo $dest_zonales['goles']; ?></div><div class="text-muted">Goles</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number text-warning"><?php echo $dest_zonales['amarillas']; ?></div><div class="text-muted">Amarillas</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-number text-danger"><?php echo $dest_zonales['rojas']; ?></div><div class="text-muted">Rojas</div></div></div>
       </div>
     </div>
   </div>
@@ -196,30 +429,78 @@ img,.rounded-circle{width:50px!important;height:50px!important}
       <?php if (empty($historial)): ?>
         <p class="text-muted mb-0">Sin historial disponible.</p>
       <?php else: ?>
-        <?php foreach($historial as $reg): ?>
-          <div class="timeline-item">
-            <div class="timeline-marker"></div>
-            <div class="row align-items-center">
-              <div class="col-md-4">
-                <strong><?php echo htmlspecialchars($reg['equipo_nombre']); ?></strong>
-                <div class="small text-muted"><i class="fas fa-trophy"></i> <?php echo htmlspecialchars($reg['campeonato_nombre']); ?> · <?php echo htmlspecialchars($reg['categoria_nombre']); ?></div>
-              </div>
-              <div class="col-md-3 small text-muted">
-                <i class="fas fa-calendar-alt"></i>
-                <?php echo date('d/m/Y', strtotime($reg['fecha_inicio'])); ?>
-                <?php if ($reg['fecha_fin']): ?> - <?php echo date('d/m/Y', strtotime($reg['fecha_fin'])); ?><?php else: ?> - <span class="badge bg-success">Actual</span><?php endif; ?>
-              </div>
-              <div class="col-md-5">
-                <div class="row g-2 text-center">
-                  <div class="col-3"><span class="badge bg-primary w-100"><?php echo (int)$reg['partidos_jugados']; ?></span><div class="small">PJ</div></div>
-                  <div class="col-3"><span class="badge bg-success w-100"><?php echo (int)$reg['goles']; ?></span><div class="small">Goles</div></div>
-                  <div class="col-3"><span class="badge bg-warning text-dark w-100"><?php echo (int)$reg['amarillas']; ?></span><div class="small">TA</div></div>
-                  <div class="col-3"><span class="badge bg-danger w-100"><?php echo (int)$reg['rojas']; ?></span><div class="small">TR</div></div>
+        <?php 
+        // Separar torneos nocturnos de campeonatos largos
+        $torneos_nocturnos = [];
+        $campeonatos_largos = [];
+        foreach($historial as $reg) {
+            if (!empty($reg['es_torneo_nocturno'])) {
+                $torneos_nocturnos[] = $reg;
+            } else {
+                $campeonatos_largos[] = $reg;
+            }
+        }
+        ?>
+        
+        <?php if (!empty($torneos_nocturnos)): ?>
+          <div class="mb-4">
+            <h6 class="text-muted mb-2"><i class="fas fa-moon"></i> Torneos Nocturnos (Por Zonas)</h6>
+            <?php foreach($torneos_nocturnos as $reg): ?>
+              <div class="timeline-item" style="border-left-color: #6c757d;">
+                <div class="timeline-marker" style="background: #6c757d;"></div>
+                <div class="row align-items-center">
+                  <div class="col-md-4">
+                    <strong><?php echo htmlspecialchars($reg['equipo_nombre']); ?></strong>
+                    <div class="small text-muted"><i class="fas fa-moon"></i> <?php echo htmlspecialchars($reg['campeonato_nombre']); ?> · <?php echo htmlspecialchars($reg['categoria_nombre']); ?></div>
+                  </div>
+                  <div class="col-md-3 small text-muted">
+                    <i class="fas fa-calendar-alt"></i>
+                    <?php echo date('d/m/Y', strtotime($reg['fecha_inicio'])); ?>
+                    <?php if ($reg['fecha_fin']): ?> - <?php echo date('d/m/Y', strtotime($reg['fecha_fin'])); ?><?php else: ?> - <span class="badge bg-success">Actual</span><?php endif; ?>
+                  </div>
+                  <div class="col-md-5">
+                    <div class="row g-2 text-center">
+                      <div class="col-3"><span class="badge bg-primary w-100"><?php echo (int)$reg['partidos_jugados']; ?></span><div class="small">PJ</div></div>
+                      <div class="col-3"><span class="badge bg-success w-100"><?php echo (int)$reg['goles']; ?></span><div class="small">Goles</div></div>
+                      <div class="col-3"><span class="badge bg-warning text-dark w-100"><?php echo (int)$reg['amarillas']; ?></span><div class="small">TA</div></div>
+                      <div class="col-3"><span class="badge bg-danger w-100"><?php echo (int)$reg['rojas']; ?></span><div class="small">TR</div></div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            <?php endforeach; ?>
           </div>
-        <?php endforeach; ?>
+        <?php endif; ?>
+        
+        <?php if (!empty($campeonatos_largos)): ?>
+          <div class="mb-3">
+            <h6 class="text-muted mb-2"><i class="fas fa-trophy"></i> Campeonatos Largos</h6>
+            <?php foreach($campeonatos_largos as $reg): ?>
+              <div class="timeline-item">
+                <div class="timeline-marker"></div>
+                <div class="row align-items-center">
+                  <div class="col-md-4">
+                    <strong><?php echo htmlspecialchars($reg['equipo_nombre']); ?></strong>
+                    <div class="small text-muted"><i class="fas fa-trophy"></i> <?php echo htmlspecialchars($reg['campeonato_nombre']); ?> · <?php echo htmlspecialchars($reg['categoria_nombre']); ?></div>
+                  </div>
+                  <div class="col-md-3 small text-muted">
+                    <i class="fas fa-calendar-alt"></i>
+                    <?php echo date('d/m/Y', strtotime($reg['fecha_inicio'])); ?>
+                    <?php if ($reg['fecha_fin']): ?> - <?php echo date('d/m/Y', strtotime($reg['fecha_fin'])); ?><?php else: ?> - <span class="badge bg-success">Actual</span><?php endif; ?>
+                  </div>
+                  <div class="col-md-5">
+                    <div class="row g-2 text-center">
+                      <div class="col-3"><span class="badge bg-primary w-100"><?php echo (int)$reg['partidos_jugados']; ?></span><div class="small">PJ</div></div>
+                      <div class="col-3"><span class="badge bg-success w-100"><?php echo (int)$reg['goles']; ?></span><div class="small">Goles</div></div>
+                      <div class="col-3"><span class="badge bg-warning text-dark w-100"><?php echo (int)$reg['amarillas']; ?></span><div class="small">TA</div></div>
+                      <div class="col-3"><span class="badge bg-danger w-100"><?php echo (int)$reg['rojas']; ?></span><div class="small">TR</div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
       <?php endif; ?>
     </div>
   </div>

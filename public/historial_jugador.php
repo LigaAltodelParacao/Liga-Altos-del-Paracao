@@ -31,9 +31,12 @@ $stmt = $db->prepare("
         e.nombre as equipo_nombre,
         e.logo as equipo_logo,
         c.nombre as categoria_nombre,
+        camp.id as campeonato_id,
         camp.nombre as campeonato_nombre,
         camp.fecha_inicio as campeonato_fecha_inicio,
-        camp.fecha_fin as campeonato_fecha_fin
+        camp.fecha_fin as campeonato_fecha_fin,
+        COALESCE(jeh.es_torneo_nocturno, camp.es_torneo_nocturno, 0) as es_torneo_nocturno,
+        COALESCE(camp.tipo_campeonato, CASE WHEN camp.es_torneo_nocturno = 1 THEN 'zonal' ELSE 'largo' END) as tipo_campeonato
     FROM jugadores_equipos_historial jeh
     JOIN equipos e ON jeh.equipo_id = e.id
     JOIN categorias c ON e.categoria_id = c.id
@@ -44,14 +47,47 @@ $stmt = $db->prepare("
 $stmt->execute([$jugador['dni']]);
 $historial = $stmt->fetchAll();
 
-// Calcular totales
+// Separar estadísticas por tipo de torneo
+$totales_largos = [
+    'campeonatos' => 0,
+    'partidos' => 0,
+    'goles' => 0,
+    'amarillas' => 0,
+    'rojas' => 0
+];
+$totales_zonales = [
+    'campeonatos' => 0,
+    'partidos' => 0,
+    'goles' => 0,
+    'amarillas' => 0,
+    'rojas' => 0
+];
+
+foreach ($historial as $reg) {
+    $esZonal = !empty($reg['es_torneo_nocturno']) || ($reg['tipo_campeonato'] ?? 'largo') === 'zonal';
+    if ($esZonal) {
+        $totales_zonales['campeonatos']++;
+        $totales_zonales['partidos'] += (int)($reg['partidos_jugados'] ?? 0);
+        $totales_zonales['goles'] += (int)($reg['goles'] ?? 0);
+        $totales_zonales['amarillas'] += (int)($reg['amarillas'] ?? 0);
+        $totales_zonales['rojas'] += (int)($reg['rojas'] ?? 0);
+    } else {
+        $totales_largos['campeonatos']++;
+        $totales_largos['partidos'] += (int)($reg['partidos_jugados'] ?? 0);
+        $totales_largos['goles'] += (int)($reg['goles'] ?? 0);
+        $totales_largos['amarillas'] += (int)($reg['amarillas'] ?? 0);
+        $totales_largos['rojas'] += (int)($reg['rojas'] ?? 0);
+    }
+}
+
+// Calcular totales generales (solo para compatibilidad)
 $totales = [
     'campeonatos' => count($historial),
     'equipos' => count(array_unique(array_column($historial, 'equipo_id'))),
-    'partidos' => array_sum(array_column($historial, 'partidos_jugados')),
-    'goles' => array_sum(array_column($historial, 'goles')),
-    'amarillas' => array_sum(array_column($historial, 'amarillas')),
-    'rojas' => array_sum(array_column($historial, 'rojas'))
+    'partidos' => $totales_largos['partidos'] + $totales_zonales['partidos'],
+    'goles' => $totales_largos['goles'] + $totales_zonales['goles'],
+    'amarillas' => $totales_largos['amarillas'] + $totales_zonales['amarillas'],
+    'rojas' => max($totales_largos['rojas'], $totales_zonales['rojas']) // Rojas compartidas
 ];
 
 function calculateAge($birthDate) {
@@ -267,42 +303,83 @@ function calculateAge($birthDate) {
             </div>
         </div>
 
-        <!-- Estadísticas totales -->
-        <div class="row g-4 mb-4">
-            <div class="col-md-2">
-                <div class="stat-card">
-                    <div class="stat-number"><?php echo $totales['campeonatos']; ?></div>
-                    <div class="stat-label">Campeonatos</div>
+        <!-- Estadísticas por tipo de torneo -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-trophy"></i> Campeonatos Largos</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-2">
+                        <div class="stat-card">
+                            <div class="stat-number"><?php echo $totales_largos['campeonatos']; ?></div>
+                            <div class="stat-label">Campeonatos</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card">
+                            <div class="stat-number"><?php echo $totales_largos['partidos']; ?></div>
+                            <div class="stat-label">Partidos</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card">
+                            <div class="stat-number text-success"><?php echo $totales_largos['goles']; ?></div>
+                            <div class="stat-label">Goles</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card">
+                            <div class="stat-number text-warning"><?php echo $totales_largos['amarillas']; ?></div>
+                            <div class="stat-label">Amarillas</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card">
+                            <div class="stat-number text-danger"><?php echo $totales_largos['rojas']; ?></div>
+                            <div class="stat-label">Rojas</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="col-md-2">
-                <div class="stat-card">
-                    <div class="stat-number"><?php echo $totales['equipos']; ?></div>
-                    <div class="stat-label">Equipos</div>
-                </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="fas fa-moon"></i> Torneos por Zonas</h5>
             </div>
-            <div class="col-md-2">
-                <div class="stat-card">
-                    <div class="stat-number"><?php echo $totales['partidos']; ?></div>
-                    <div class="stat-label">Partidos</div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="stat-card">
-                    <div class="stat-number text-success"><?php echo $totales['goles']; ?></div>
-                    <div class="stat-label">Goles</div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="stat-card">
-                    <div class="stat-number text-warning"><?php echo $totales['amarillas']; ?></div>
-                    <div class="stat-label">Amarillas</div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="stat-card">
-                    <div class="stat-number text-danger"><?php echo $totales['rojas']; ?></div>
-                    <div class="stat-label">Rojas</div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-2">
+                        <div class="stat-card">
+                            <div class="stat-number"><?php echo $totales_zonales['campeonatos']; ?></div>
+                            <div class="stat-label">Campeonatos</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card">
+                            <div class="stat-number"><?php echo $totales_zonales['partidos']; ?></div>
+                            <div class="stat-label">Partidos</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card">
+                            <div class="stat-number text-success"><?php echo $totales_zonales['goles']; ?></div>
+                            <div class="stat-label">Goles</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card">
+                            <div class="stat-number text-warning"><?php echo $totales_zonales['amarillas']; ?></div>
+                            <div class="stat-label">Amarillas</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card">
+                            <div class="stat-number text-danger"><?php echo $totales_zonales['rojas']; ?></div>
+                            <div class="stat-label">Rojas</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

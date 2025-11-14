@@ -171,7 +171,9 @@ function actualizarEstadisticasZona($zona_id, $equipo_id, $db) {
                      (equipo_visitante_id = ? AND goles_visitante > goles_local) 
                 THEN 1 ELSE 0 END) as ganados,
             SUM(CASE 
-                WHEN estado = 'finalizado' AND goles_local = goles_visitante 
+                WHEN estado = 'finalizado' 
+                AND goles_local = goles_visitante
+                AND (equipo_local_id = ? OR equipo_visitante_id = ?)
                 THEN 1 ELSE 0 END) as empatados,
             SUM(CASE 
                 WHEN (equipo_local_id = ? AND goles_local < goles_visitante) OR 
@@ -194,7 +196,7 @@ function actualizarEstadisticasZona($zona_id, $equipo_id, $db) {
     
     $stmt->execute([
         $equipo_id, $equipo_id,  // ganados
-        $equipo_id, $equipo_id,  // empatados
+        $equipo_id, $equipo_id,  // empatados (verificando que el equipo esté en el partido)
         $equipo_id, $equipo_id,  // perdidos
         $equipo_id, $equipo_id,  // goles_favor
         $equipo_id, $equipo_id,  // goles_contra
@@ -266,45 +268,58 @@ function actualizarEstadisticasZona($zona_id, $equipo_id, $db) {
  * 1. Mayor diferencia de goles (GF - GC)
  * 2. Mayor cantidad de goles a favor
  * 3. Resultado entre equipos empatados (enfrentamiento directo)
- * 4. Menor cantidad de tarjetas rojas
- * 5. Menor cantidad de tarjetas amarillas
- * 6. Sorteo
+ * 4. Mayor diferencia de goles en enfrentamientos directos
+ * 5. Mayor cantidad de goles a favor en enfrentamientos directos
+ * 6. Fairplay (menos tarjetas)
+ * 7. Sorteo (requiere resolución manual)
  */
 function obtenerTablaPosicionesZona($zona_id, $db) {
-    // Primero obtener estadísticas básicas
-    $stmt = $db->prepare("
-        SELECT 
-            ez.equipo_id,
-            e.nombre as equipo,
-            e.logo,
-            ez.puntos,
-            ez.partidos_jugados,
-            ez.partidos_ganados,
-            ez.partidos_empatados,
-            ez.partidos_perdidos,
-            ez.goles_favor,
-            ez.goles_contra,
-            ez.diferencia_gol,
-            ez.tarjetas_amarillas,
-            ez.tarjetas_rojas
-        FROM equipos_zonas ez
-        JOIN equipos e ON ez.equipo_id = e.id
-        WHERE ez.zona_id = ?
-        ORDER BY ez.puntos DESC, ez.diferencia_gol DESC, ez.goles_favor DESC
-    ");
-    $stmt->execute([$zona_id]);
-    $equipos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Incluir funciones de desempate
+    require_once __DIR__ . '/include/desempate_functions.php';
     
-    // Aplicar desempates
-    $equipos = aplicarDesempates($equipos, $zona_id, $db);
+    // Usar la función de desempate que detecta empates pendientes
+    $equipos_ordenados = calcularTablaPosicionesConDesempate($zona_id, $db);
     
-    // Agregar posición
-    $posicion = 1;
-    foreach ($equipos as &$equipo) {
-        $equipo['posicion'] = $posicion++;
+    // Agregar información adicional si es necesario
+    $resultado = [];
+    foreach ($equipos_ordenados as $equipo) {
+        $resultado[] = [
+            'equipo_id' => $equipo['id'],
+            'equipo' => $equipo['nombre'],
+            'logo' => $equipo['logo'],
+            'puntos' => $equipo['puntos'],
+            'partidos_jugados' => $equipo['partidos_jugados'] ?? 0,
+            'partidos_ganados' => $equipo['partidos_ganados'] ?? 0,
+            'partidos_empatados' => $equipo['partidos_empatados'] ?? 0,
+            'partidos_perdidos' => $equipo['partidos_perdidos'] ?? 0,
+            'goles_favor' => $equipo['goles_favor'],
+            'goles_contra' => $equipo['goles_contra'],
+            'diferencia_gol' => $equipo['diferencia_gol'],
+            'posicion' => $equipo['posicion'] ?? 0
+        ];
     }
     
-    return $equipos;
+    return $resultado;
+}
+
+/**
+ * Actualiza las posiciones en la tabla equipos_zonas
+ */
+function actualizarPosicionesZona($zona_id, $db) {
+    // Obtener tabla de posiciones con desempates
+    $equipos = obtenerTablaPosicionesZona($zona_id, $db);
+    
+    // Actualizar posiciones en la base de datos
+    foreach ($equipos as $equipo) {
+        $stmt = $db->prepare("
+            UPDATE equipos_zonas 
+            SET posicion = ? 
+            WHERE zona_id = ? AND equipo_id = ?
+        ");
+        $stmt->execute([$equipo['posicion'], $zona_id, $equipo['equipo_id']]);
+    }
+    
+    return true;
 }
 
 /**
@@ -528,6 +543,9 @@ function todosPartidosGruposFinalizados($formato_id, $db) {
  * Obtiene los equipos clasificados según la configuración
  */
 function obtenerEquiposClasificados($formato_id, $db) {
+    // Incluir funciones de desempate
+    require_once __DIR__ . '/include/desempate_functions.php';
+    
     $stmt = $db->prepare("
         SELECT 
             primeros_clasifican,
@@ -547,65 +565,41 @@ function obtenerEquiposClasificados($formato_id, $db) {
     $stmt->execute([$formato_id]);
     $zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
+    // Recalcular tablas con desempate
     foreach ($zonas as $zona) {
-        $tabla = obtenerTablaPosicionesZona($zona['id'], $db);
+        calcularTablaPosicionesConDesempate($zona['id'], $db);
+    }
+    
+    // Obtener equipos clasificados desde equipos_zonas (ya ordenados por desempate)
+    foreach ($zonas as $zona) {
+        $stmt = $db->prepare("
+            SELECT 
+                e.id as equipo_id,
+                e.nombre as equipo,
+                e.logo,
+                ez.posicion,
+                ez.puntos,
+                ez.diferencia_gol as diferencia,
+                z.nombre as zona
+            FROM equipos_zonas ez
+            INNER JOIN equipos e ON ez.equipo_id = e.id
+            INNER JOIN zonas z ON ez.zona_id = z.id
+            WHERE ez.zona_id = ? AND ez.clasificado = 1
+            ORDER BY ez.posicion ASC
+        ");
+        $stmt->execute([$zona['id']]);
+        $equipos_clasificados = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Primeros (siempre clasifican)
-        for ($i = 0; $i < $config['primeros_clasifican'] && $i < count($tabla); $i++) {
+        foreach ($equipos_clasificados as $equipo) {
             $clasificados[] = [
-                'equipo_id' => $tabla[$i]['equipo_id'],
-                'equipo' => $tabla[$i]['equipo'],
-                'logo' => $tabla[$i]['logo'],
-                'zona' => $zona['nombre'],
-                'posicion' => 1,
-                'puntos' => $tabla[$i]['puntos'],
-                'diferencia' => $tabla[$i]['diferencia_gol']
+                'equipo_id' => $equipo['equipo_id'],
+                'equipo' => $equipo['equipo'],
+                'logo' => $equipo['logo'],
+                'zona' => $equipo['zona'],
+                'posicion' => $equipo['posicion'],
+                'puntos' => $equipo['puntos'],
+                'diferencia' => $equipo['diferencia']
             ];
-        }
-        
-        // Segundos
-        if ($config['segundos_clasifican'] > 0 && count($tabla) > 1) {
-            for ($i = 1; $i < min(1 + $config['segundos_clasifican'], count($tabla)); $i++) {
-                $clasificados[] = [
-                    'equipo_id' => $tabla[$i]['equipo_id'],
-                    'equipo' => $tabla[$i]['equipo'],
-                    'logo' => $tabla[$i]['logo'],
-                    'zona' => $zona['nombre'],
-                    'posicion' => 2,
-                    'puntos' => $tabla[$i]['puntos'],
-                    'diferencia' => $tabla[$i]['diferencia_gol']
-                ];
-            }
-        }
-        
-        // Terceros
-        if ($config['terceros_clasifican'] > 0 && count($tabla) > 2) {
-            for ($i = 2; $i < min(2 + $config['terceros_clasifican'], count($tabla)); $i++) {
-                $clasificados[] = [
-                    'equipo_id' => $tabla[$i]['equipo_id'],
-                    'equipo' => $tabla[$i]['equipo'],
-                    'logo' => $tabla[$i]['logo'],
-                    'zona' => $zona['nombre'],
-                    'posicion' => 3,
-                    'puntos' => $tabla[$i]['puntos'],
-                    'diferencia' => $tabla[$i]['diferencia_gol']
-                ];
-            }
-        }
-        
-        // Cuartos
-        if ($config['cuartos_clasifican'] > 0 && count($tabla) > 3) {
-            for ($i = 3; $i < min(3 + $config['cuartos_clasifican'], count($tabla)); $i++) {
-                $clasificados[] = [
-                    'equipo_id' => $tabla[$i]['equipo_id'],
-                    'equipo' => $tabla[$i]['equipo'],
-                    'logo' => $tabla[$i]['logo'],
-                    'zona' => $zona['nombre'],
-                    'posicion' => 4,
-                    'puntos' => $tabla[$i]['puntos'],
-                    'diferencia' => $tabla[$i]['diferencia_gol']
-                ];
-            }
         }
     }
     
@@ -623,6 +617,27 @@ function generarFixtureEliminatorias($formato_id, $db) {
         // Verificar que todos los partidos de grupos estén finalizados
         if (!todosPartidosGruposFinalizados($formato_id, $db)) {
             throw new Exception("Aún hay partidos de grupos pendientes");
+        }
+        
+        // Incluir funciones de desempate
+        require_once __DIR__ . '/include/desempate_functions.php';
+        
+        // Recalcular todas las tablas de posiciones con desempate
+        $stmt = $db->prepare("SELECT id FROM zonas WHERE formato_id = ?");
+        $stmt->execute([$formato_id]);
+        $zonas = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        foreach ($zonas as $zona_id) {
+            calcularTablaPosicionesConDesempate($zona_id, $db);
+        }
+        
+        // Verificar si hay empates pendientes de resolución
+        if (hayEmpatesPendientes($formato_id, $db)) {
+            $empates = obtenerEmpatesPendientes($formato_id, $db);
+            $mensaje = "Hay " . count($empates) . " empate(s) pendiente(s) de resolución por sorteo. ";
+            $mensaje .= "Debes resolver todos los empates antes de generar las fases eliminatorias. ";
+            $mensaje .= "Ve a la sección de resolución de empates.";
+            throw new Exception($mensaje);
         }
         
         // Obtener configuración
@@ -690,7 +705,7 @@ function generarFixtureEliminatorias($formato_id, $db) {
                 INSERT INTO partidos 
                 (fecha_id, equipo_local_id, equipo_visitante_id, fase_eliminatoria_id, numero_llave,
                  origen_local, origen_visitante, tipo_torneo, estado, fecha_partido)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'eliminatoria', 'pendiente', DATE_ADD(CURDATE(), INTERVAL 7 DAY))
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'eliminatoria', 'programado', DATE_ADD(CURDATE(), INTERVAL 7 DAY))
             ");
             
             $stmt->execute([
@@ -853,7 +868,7 @@ function avanzarSiguienteFase($fase_id, $db) {
             INSERT INTO partidos 
             (fecha_id, equipo_local_id, equipo_visitante_id, fase_eliminatoria_id, numero_llave,
              origen_local, origen_visitante, tipo_torneo, estado, fecha_partido)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'eliminatoria', 'pendiente', DATE_ADD(CURDATE(), INTERVAL 7 DAY))
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'eliminatoria', 'programado', DATE_ADD(CURDATE(), INTERVAL 7 DAY))
         ");
         
         $stmt->execute([

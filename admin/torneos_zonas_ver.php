@@ -46,6 +46,24 @@ $stmt->execute([$formato_id]);
 $zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Obtener equipos por zona con estadísticas
+// Primero actualizar estadísticas desde partidos finalizados
+require_once __DIR__ . '/funciones_torneos_zonas.php';
+foreach ($zonas as $zona) {
+    // Obtener equipos de la zona
+    $stmt = $db->prepare("SELECT DISTINCT equipo_id FROM equipos_zonas WHERE zona_id = ?");
+    $stmt->execute([$zona['id']]);
+    $equipos_zona = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    
+    // Actualizar estadísticas de cada equipo
+    foreach ($equipos_zona as $equipo_id) {
+        actualizarEstadisticasZona($zona['id'], $equipo_id, $db);
+    }
+    
+    // Actualizar posiciones después de actualizar estadísticas
+    actualizarPosicionesZona($zona['id'], $db);
+}
+
+// Ahora obtener equipos con estadísticas actualizadas
 $equipos_por_zona = [];
 foreach ($zonas as $zona) {
     $stmt = $db->prepare("
@@ -71,21 +89,31 @@ $stmt = $db->prepare("
 $stmt->execute([$formato_id]);
 $fases = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Obtener partidos eliminatorios
+// Obtener partidos eliminatorios desde tabla partidos (sistema integrado)
 $partidos_eliminatorios = [];
 foreach ($fases as $fase) {
     $stmt = $db->prepare("
         SELECT 
-            pe.*,
+            p.*,
             el.nombre as equipo_local_nombre,
+            el.logo as logo_local,
             ev.nombre as equipo_visitante_nombre,
-            c.nombre as cancha_nombre
-        FROM partidos_eliminatorios pe
-        LEFT JOIN equipos el ON pe.equipo_local_id = el.id
-        LEFT JOIN equipos ev ON pe.equipo_visitante_id = ev.id
-        LEFT JOIN canchas c ON pe.cancha_id = c.id
-        WHERE pe.fase_id = ?
-        ORDER BY pe.numero_llave
+            ev.logo as logo_visitante,
+            c.nombre as cancha_nombre,
+            CASE 
+                WHEN p.goles_local > p.goles_visitante THEN p.equipo_local_id
+                WHEN p.goles_visitante > p.goles_local THEN p.equipo_visitante_id
+                WHEN p.goles_local_penales IS NOT NULL AND p.goles_local_penales > p.goles_visitante_penales THEN p.equipo_local_id
+                WHEN p.goles_visitante_penales IS NOT NULL AND p.goles_visitante_penales > p.goles_local_penales THEN p.equipo_visitante_id
+                ELSE NULL
+            END as ganador_id
+        FROM partidos p
+        LEFT JOIN equipos el ON p.equipo_local_id = el.id
+        LEFT JOIN equipos ev ON p.equipo_visitante_id = ev.id
+        LEFT JOIN canchas c ON p.cancha_id = c.id
+        WHERE p.fase_eliminatoria_id = ? 
+          AND p.tipo_torneo = 'eliminatoria'
+        ORDER BY p.numero_llave
     ");
     $stmt->execute([$fase['id']]);
     $partidos_eliminatorios[$fase['id']] = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -219,8 +247,13 @@ foreach ($fases as $fase) {
                                                         <th>Pos</th>
                                                         <th>Equipo</th>
                                                         <th class="text-center">PJ</th>
-                                                        <th class="text-center">Pts</th>
-                                                        <th class="text-center">DG</th>
+                                                        <th class="text-center">PG</th>
+                                                        <th class="text-center">PE</th>
+                                                        <th class="text-center">PP</th>
+                                                        <th class="text-center">GF</th>
+                                                        <th class="text-center">GE</th>
+                                                        <th class="text-center">DIF</th>
+                                                        <th class="text-center"><strong>Pts</strong></th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -238,8 +271,13 @@ foreach ($fases as $fase) {
                                                                 <?= htmlspecialchars($equipo['equipo_nombre']) ?>
                                                             </td>
                                                             <td class="text-center"><?= $equipo['partidos_jugados'] ?></td>
-                                                            <td class="text-center"><strong><?= $equipo['puntos'] ?></strong></td>
+                                                            <td class="text-center"><?= $equipo['partidos_ganados'] ?></td>
+                                                            <td class="text-center"><?= $equipo['partidos_empatados'] ?></td>
+                                                            <td class="text-center"><?= $equipo['partidos_perdidos'] ?></td>
+                                                            <td class="text-center"><?= $equipo['goles_favor'] ?></td>
+                                                            <td class="text-center"><?= $equipo['goles_contra'] ?></td>
                                                             <td class="text-center"><?= $equipo['diferencia_gol'] ?></td>
+                                                            <td class="text-center"><strong><?= $equipo['puntos'] ?></strong></td>
                                                         </tr>
                                                     <?php endforeach; ?>
                                                 </tbody>
@@ -312,9 +350,16 @@ foreach ($fases as $fase) {
                                                         <?php endif; ?>
                                                     </div>
                                                     
+                                                    <?php if ($partido['goles_local'] !== null && $partido['goles_visitante'] !== null): ?>
+                                                        <?php if ($partido['goles_local_penales'] !== null || $partido['goles_visitante_penales'] !== null): ?>
+                                                            <div class="text-center mt-2">
+                                                                <small class="text-muted">Penales: <?= $partido['goles_local_penales'] ?? 0 ?> - <?= $partido['goles_visitante_penales'] ?? 0 ?></small>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                    <?php endif; ?>
                                                     <div class="text-center mt-2">
-                                                        <span class="badge bg-<?= $partido['estado'] === 'finalizado' ? 'success' : ($partido['estado'] === 'programado' ? 'primary' : 'secondary') ?>">
-                                                            <?= ucfirst($partido['estado']) ?>
+                                                        <span class="badge bg-<?= $partido['estado'] === 'finalizado' ? 'success' : ($partido['estado'] === 'programado' ? 'primary' : ($partido['estado'] === 'en_curso' ? 'warning' : 'secondary')) ?>">
+                                                            <?= ucfirst($partido['estado'] ?? 'programado') ?>
                                                         </span>
                                                     </div>
                                                 </div>

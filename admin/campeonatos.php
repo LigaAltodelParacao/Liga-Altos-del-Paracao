@@ -15,19 +15,43 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     switch ($action) {
         case 'create':
-            $nombre = trim($_POST['nombre']);
-            $descripcion = trim($_POST['descripcion']);
-            $fecha_inicio = $_POST['fecha_inicio'];
-                        
-            if (empty($nombre) || empty($fecha_inicio)) {
-                $error = 'El nombre y fecha de inicio son obligatorios';
+            $nombre = trim($_POST['nombre'] ?? '');
+            $descripcion = trim($_POST['descripcion'] ?? '');
+            $fecha_inicio = $_POST['fecha_inicio'] ?? '';
+            $tipo_campeonato = $_POST['tipo_campeonato'] ?? '';
+            
+            // Validaciones estrictas
+            if (empty($nombre)) {
+                $error = 'El nombre del campeonato es obligatorio';
+            } elseif (empty($fecha_inicio)) {
+                $error = 'La fecha de inicio es obligatoria';
+            } elseif (empty($tipo_campeonato)) {
+                $error = 'DEBE seleccionar el tipo de campeonato (Largo o Zonal). Este campo es obligatorio.';
+            } elseif (!in_array($tipo_campeonato, ['largo', 'zonal'])) {
+                $error = 'El tipo de campeonato seleccionado no es válido. Debe ser "Largo" o "Zonal".';
             } else {
                 try {
+                    // Verificar que el campo tipo_campeonato existe en la tabla
+                    $stmt_check = $db->query("SHOW COLUMNS FROM campeonatos LIKE 'tipo_campeonato'");
+                    $campo_existe = $stmt_check->rowCount() > 0;
+                    
+                    if (!$campo_existe) {
+                        // Si no existe, intentar agregarlo
+                        try {
+                            $db->exec("ALTER TABLE campeonatos ADD COLUMN tipo_campeonato ENUM('largo', 'zonal') NOT NULL COMMENT 'Tipo de campeonato' AFTER es_torneo_nocturno");
+                        } catch (Exception $e) {
+                            $error = 'Error en la base de datos. El campo tipo_campeonato no existe y no se pudo crear. Contacte al administrador.';
+                            break;
+                        }
+                    }
+                    
                     $stmt = $db->prepare("
-                        INSERT INTO campeonatos (nombre, descripcion, fecha_inicio) 
-                        VALUES (?, ?, ?)
+                        INSERT INTO campeonatos (nombre, descripcion, fecha_inicio, tipo_campeonato, es_torneo_nocturno) 
+                        VALUES (?, ?, ?, ?, ?)
                     ");
-                    $stmt->execute([$nombre, $descripcion, $fecha_inicio]);
+                    // Si es zonal, también establecer es_torneo_nocturno = 1 para compatibilidad
+                    $es_torneo_nocturno = ($tipo_campeonato === 'zonal') ? 1 : 0;
+                    $stmt->execute([$nombre, $descripcion, $fecha_inicio, $tipo_campeonato, $es_torneo_nocturno]);
                     $message = 'Campeonato creado exitosamente';
                 } catch (Exception $e) {
                     $error = 'Error al crear campeonato: ' . $e->getMessage();
@@ -36,22 +60,38 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             break;
             
         case 'update':
-            $id = $_POST['id'];
-            $nombre = trim($_POST['nombre']);
-            $descripcion = trim($_POST['descripcion']);
-            $fecha_inicio = $_POST['fecha_inicio'];
+            $id = $_POST['id'] ?? 0;
+            $nombre = trim($_POST['nombre'] ?? '');
+            $descripcion = trim($_POST['descripcion'] ?? '');
+            $fecha_inicio = $_POST['fecha_inicio'] ?? '';
             $activo = isset($_POST['activo']) ? 1 : 0;
+            $tipo_campeonato = $_POST['tipo_campeonato'] ?? '';
             
-            try {
-                $stmt = $db->prepare("
-                    UPDATE campeonatos 
-                    SET nombre = ?, descripcion = ?, fecha_inicio = ?, activo = ?
-                    WHERE id = ?
-                ");
-                $stmt->execute([$nombre, $descripcion, $fecha_inicio, $activo, $id]);
-                $message = 'Campeonato actualizado exitosamente';
-            } catch (Exception $e) {
-                $error = 'Error al actualizar campeonato: ' . $e->getMessage();
+            // Validaciones estrictas
+            if (empty($id)) {
+                $error = 'ID de campeonato no válido';
+            } elseif (empty($nombre)) {
+                $error = 'El nombre del campeonato es obligatorio';
+            } elseif (empty($fecha_inicio)) {
+                $error = 'La fecha de inicio es obligatoria';
+            } elseif (empty($tipo_campeonato)) {
+                $error = 'DEBE seleccionar el tipo de campeonato (Largo o Zonal). Este campo es obligatorio.';
+            } elseif (!in_array($tipo_campeonato, ['largo', 'zonal'])) {
+                $error = 'El tipo de campeonato seleccionado no es válido. Debe ser "Largo" o "Zonal".';
+            } else {
+                try {
+                    // Si es zonal, también actualizar es_torneo_nocturno = 1 para compatibilidad
+                    $es_torneo_nocturno = ($tipo_campeonato === 'zonal') ? 1 : 0;
+                    $stmt = $db->prepare("
+                        UPDATE campeonatos 
+                        SET nombre = ?, descripcion = ?, fecha_inicio = ?, activo = ?, tipo_campeonato = ?, es_torneo_nocturno = ?
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$nombre, $descripcion, $fecha_inicio, $activo, $tipo_campeonato, $es_torneo_nocturno, $id]);
+                    $message = 'Campeonato actualizado exitosamente';
+                } catch (Exception $e) {
+                    $error = 'Error al actualizar campeonato: ' . $e->getMessage();
+                }
             }
             break;
             
@@ -72,7 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 $stmt = $db->query("
     SELECT c.*, 
            COUNT(DISTINCT cat.id) as categorias,
-           COUNT(DISTINCT e.id) as equipos
+           COUNT(DISTINCT e.id) as equipos,
+           COALESCE(c.tipo_campeonato, CASE WHEN c.es_torneo_nocturno = 1 THEN 'zonal' ELSE 'largo' END) as tipo_campeonato
     FROM campeonatos c
     LEFT JOIN categorias cat ON c.id = cat.campeonato_id
     LEFT JOIN equipos e ON cat.id = e.categoria_id
@@ -188,6 +229,14 @@ if (isset($_GET['edit'])) {
                                                 <span class="badge bg-success"><?php echo $campeonato['equipos']; ?></span>
                                             </td>
                                             <td>
+                                                <?php 
+                                                $tipo = $campeonato['tipo_campeonato'] ?? 'largo';
+                                                if ($tipo == 'zonal'): ?>
+                                                    <span class="badge bg-info">Zonal</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-primary">Largo</span>
+                                                <?php endif; ?>
+                                                <br>
                                                 <?php if ($campeonato['activo']): ?>
                                                     <span class="badge bg-success">Activo</span>
                                                 <?php else: ?>
@@ -232,7 +281,7 @@ if (isset($_GET['edit'])) {
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form method="POST" id="formCampeonato">
+                <form method="POST" id="formCampeonato" onsubmit="return validarFormularioCampeonato(event)">
                     <input type="hidden" name="action" id="formAction" value="create">
                     <input type="hidden" name="id" id="campeonatoId">
                     
@@ -254,7 +303,17 @@ if (isset($_GET['edit'])) {
                                     <input type="date" class="form-control" id="fecha_inicio" name="fecha_inicio" required>
                                 </div>
                             </div>
-                            <div class="col-md-6">                                
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="tipo_campeonato" class="form-label">Tipo de Campeonato *</label>
+                                    <select class="form-select" id="tipo_campeonato" name="tipo_campeonato" required>
+                                        <option value="">-- Seleccione el tipo --</option>
+                                        <option value="largo">Campeonato Largo (Apertura/Clausura)</option>
+                                        <option value="zonal">Torneo por Zonas (Torneo Nocturno, etc.)</option>
+                                    </select>
+                                    <small class="text-muted d-block mt-1">⚠️ <strong>OBLIGATORIO:</strong> Debes seleccionar si es un campeonato largo o un torneo por zonas</small>
+                                    <div id="error_tipo_campeonato" class="text-danger mt-1" style="display: none;"></div>
+                                </div>
                             </div>
                         </div>
                         
@@ -297,6 +356,7 @@ if (isset($_GET['edit'])) {
                 document.getElementById('nombre').value = '<?php echo htmlspecialchars($campeonato['nombre'], ENT_QUOTES); ?>';
                 document.getElementById('descripcion').value = '<?php echo htmlspecialchars($campeonato['descripcion'], ENT_QUOTES); ?>';
                 document.getElementById('fecha_inicio').value = '<?php echo $campeonato['fecha_inicio']; ?>';
+                document.getElementById('tipo_campeonato').value = '<?php echo htmlspecialchars($campeonato['tipo_campeonato'] ?? 'largo', ENT_QUOTES); ?>';
                 document.getElementById('activo').checked = <?php echo $campeonato['activo'] ? 'true' : 'false'; ?>;
                 document.getElementById('activoContainer').style.display = 'block';
                 
@@ -314,6 +374,42 @@ if (isset($_GET['edit'])) {
             }
         }
 
+        // Validación del formulario antes de enviar
+        function validarFormularioCampeonato(event) {
+            const tipoCampeonato = document.getElementById('tipo_campeonato').value;
+            const errorDiv = document.getElementById('error_tipo_campeonato');
+            
+            if (!tipoCampeonato || tipoCampeonato === '') {
+                event.preventDefault();
+                errorDiv.textContent = '⚠️ DEBES seleccionar el tipo de campeonato (Largo o Zonal)';
+                errorDiv.style.display = 'block';
+                document.getElementById('tipo_campeonato').focus();
+                document.getElementById('tipo_campeonato').classList.add('is-invalid');
+                return false;
+            }
+            
+            if (tipoCampeonato !== 'largo' && tipoCampeonato !== 'zonal') {
+                event.preventDefault();
+                errorDiv.textContent = '⚠️ El tipo de campeonato seleccionado no es válido';
+                errorDiv.style.display = 'block';
+                document.getElementById('tipo_campeonato').focus();
+                document.getElementById('tipo_campeonato').classList.add('is-invalid');
+                return false;
+            }
+            
+            errorDiv.style.display = 'none';
+            document.getElementById('tipo_campeonato').classList.remove('is-invalid');
+            return true;
+        }
+        
+        // Limpiar errores cuando se selecciona un valor
+        document.getElementById('tipo_campeonato').addEventListener('change', function() {
+            if (this.value !== '') {
+                document.getElementById('error_tipo_campeonato').style.display = 'none';
+                this.classList.remove('is-invalid');
+            }
+        });
+        
         // Limpiar formulario al cerrar modal
         document.getElementById('modalCampeonato').addEventListener('hidden.bs.modal', function () {
             document.getElementById('formCampeonato').reset();
@@ -321,6 +417,10 @@ if (isset($_GET['edit'])) {
             document.getElementById('formAction').value = 'create';
             document.getElementById('campeonatoId').value = '';
             document.getElementById('activoContainer').style.display = 'none';
+            // Resetear el select de tipo_campeonato
+            document.getElementById('tipo_campeonato').value = '';
+            document.getElementById('error_tipo_campeonato').style.display = 'none';
+            document.getElementById('tipo_campeonato').classList.remove('is-invalid');
         });
     </script>
 </body>

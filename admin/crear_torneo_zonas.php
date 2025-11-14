@@ -11,8 +11,13 @@ $db = Database::getInstance()->getConnection();
 $message = '';
 $error = '';
 
-// Obtener campeonatos
-$campeonatos = $db->query("SELECT * FROM campeonatos WHERE activo=1 ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
+// Obtener solo campeonatos zonales
+$campeonatos = $db->query("
+    SELECT * FROM campeonatos 
+    WHERE activo=1 
+    AND (tipo_campeonato = 'zonal' OR es_torneo_nocturno = 1)
+    ORDER BY nombre
+")->fetchAll(PDO::FETCH_ASSOC);
 
 // AJAX: Obtener categorías por campeonato
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'categorias' && isset($_GET['campeonato_id'])) {
@@ -58,6 +63,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
         $cantidad_zonas = (int)$_POST['cantidad_zonas'];
         $equipos_seleccionados = $_POST['equipos'] ?? [];
         $cantidad_equipos = count($equipos_seleccionados);
+        
+        // Verificar que el campeonato sea de tipo zonal
+        $stmt = $db->prepare("
+            SELECT tipo_campeonato, es_torneo_nocturno, nombre
+            FROM campeonatos 
+            WHERE id = ?
+        ");
+        $stmt->execute([$campeonato_id]);
+        $campeonato = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$campeonato) {
+            throw new Exception("El campeonato seleccionado no existe");
+        }
+        
+        // Verificar que el campeonato tenga tipo_campeonato definido
+        if (empty($campeonato['tipo_campeonato']) || $campeonato['tipo_campeonato'] === '') {
+            throw new Exception("El campeonato '{$campeonato['nombre']}' no tiene tipo definido. Por favor, edita el campeonato y selecciona si es 'Largo' o 'Zonal'.");
+        }
+        
+        $es_zonal = $campeonato['tipo_campeonato'] === 'zonal' || ($campeonato['es_torneo_nocturno'] ?? 0) == 1;
+        
+        if (!$es_zonal) {
+            throw new Exception("El campeonato '{$campeonato['nombre']}' es de tipo 'largo'. Para crear un torneo por zonas, debes seleccionar un campeonato de tipo 'zonal'. Por favor, edita el campeonato y cambia su tipo a 'Torneo por Zonas'.");
+        }
+        
+        // Asegurar que tipo_campeonato esté correctamente establecido como 'zonal'
+        if ($campeonato['tipo_campeonato'] !== 'zonal') {
+            $stmt = $db->prepare("UPDATE campeonatos SET tipo_campeonato = 'zonal', es_torneo_nocturno = 1 WHERE id = ?");
+            $stmt->execute([$campeonato_id]);
+        }
         
         // Configuración de clasificación
         $segundos_clasifican = (int)($_POST['segundos_clasifican'] ?? 0);

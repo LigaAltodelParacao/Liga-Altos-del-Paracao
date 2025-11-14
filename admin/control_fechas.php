@@ -126,9 +126,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt->execute([$partido_id]);
 
             // Registrar goles
+            // NOTA: El trigger trg_eventos_partido_campeonato determina automáticamente
+            // el tipo de torneo (largo/zonal) y establece es_torneo_zonal y campeonato_id
             if (!empty($_POST['goles']) && is_array($_POST['goles'])) {
                 foreach ($_POST['goles'] as $gol) {
                     if (!empty($gol['jugador_id'])) {
+                        // El trigger se encarga de establecer es_torneo_zonal y campeonato_id automáticamente
                         $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto) VALUES (?, ?, 'gol', 0)");
                         $stmt->execute([$partido_id, (int)$gol['jugador_id']]);
                     }
@@ -136,11 +139,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
 
             // Registrar tarjetas
+            // NOTA: El trigger trg_eventos_partido_campeonato determina automáticamente
+            // el tipo de torneo (largo/zonal) y establece es_torneo_zonal y campeonato_id
             if (!empty($_POST['tarjetas']) && is_array($_POST['tarjetas'])) {
                 foreach ($_POST['tarjetas'] as $tarjeta) {
                     if (!empty($tarjeta['jugador_id']) && !empty($tarjeta['tipo'])) {
                         $jugador_id = (int)$tarjeta['jugador_id'];
                         $tipo = $tarjeta['tipo'];
+                        // El trigger se encarga de establecer es_torneo_zonal y campeonato_id automáticamente
                         $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto) VALUES (?, ?, ?, 0)");
                         $stmt->execute([$partido_id, $jugador_id, $tipo]);
                     }
@@ -160,6 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             foreach ($dobles as $doble) {
                 $stmt = $db->prepare("DELETE FROM eventos_partido WHERE partido_id = ? AND jugador_id = ? AND tipo_evento = 'amarilla'");
                 $stmt->execute([$partido_id, $doble['jugador_id']]);
+                // El trigger se encarga de establecer es_torneo_zonal y campeonato_id automáticamente
                 $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto, observaciones) VALUES (?, ?, 'roja', 0, 'Doble amarilla')");
                 $stmt->execute([$partido_id, $doble['jugador_id']]);
             }

@@ -6,6 +6,8 @@
 
 /**
  * Obtiene o crea el formato del campeonato
+ * IMPORTANTE: Solo crea formato automáticamente para campeonatos zonales
+ * Los campeonatos largos NO deben tener formato automático
  */
 function obtenerFormatoCampeonato($pdo, $categoria_id) {
     // Obtener campeonato_id de la categoría
@@ -15,20 +17,38 @@ function obtenerFormatoCampeonato($pdo, $categoria_id) {
     
     if (!$campeonato_id) return null;
     
+    // Verificar el tipo de campeonato
+    $stmt = $pdo->prepare("
+        SELECT tipo_campeonato, es_torneo_nocturno 
+        FROM campeonatos 
+        WHERE id = ?
+    ");
+    $stmt->execute([$campeonato_id]);
+    $campeonato = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$campeonato) return null;
+    
+    // Determinar si es zonal
+    $es_zonal = ($campeonato['tipo_campeonato'] ?? 'largo') === 'zonal' || 
+                ($campeonato['es_torneo_nocturno'] ?? 0) == 1;
+    
     // Buscar formato existente
     $stmt = $pdo->prepare("SELECT * FROM campeonatos_formato WHERE campeonato_id = ? AND activo = 1 LIMIT 1");
     $stmt->execute([$campeonato_id]);
     $formato = $stmt->fetch();
     
-    if (!$formato) {
-        // Crear formato por defecto
+    // NO crear formato automáticamente para campeonatos largos
+    // Solo los campeonatos zonales pueden tener formato
+    if (!$formato && $es_zonal) {
+        // Solo crear formato por defecto si es un campeonato zonal
+        // Para campeonatos largos, el formato debe crearse manualmente si es necesario
         $stmt = $pdo->prepare("
             INSERT INTO campeonatos_formato 
-            (campeonato_id, tipo_formato, cantidad_zonas, equipos_por_zona, equipos_clasifican, 
+            (campeonato_id, categoria_id, tipo_formato, cantidad_zonas, equipos_por_zona, equipos_clasifican, 
              tiene_cuartos, tiene_semifinal, tiene_tercer_puesto)
-            VALUES (?, 'mixto', 4, 4, 2, 1, 1, 1)
+            VALUES (?, ?, 'mixto', 4, 4, 2, 1, 1, 1)
         ");
-        $stmt->execute([$campeonato_id]);
+        $stmt->execute([$campeonato_id, $categoria_id]);
         return obtenerFormatoCampeonato($pdo, $categoria_id);
     }
     
