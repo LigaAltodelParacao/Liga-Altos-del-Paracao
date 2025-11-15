@@ -14,69 +14,199 @@ $unassigned = [];
 // Filtros GET
 $campeonato_id = $_GET['campeonato_id'] ?? null;
 $categoria_id = $_GET['categoria_id'] ?? null;
-$formato_id = $_GET['formato_id'] ?? null;
-$zonas_ids = $_GET['zonas_ids'] ?? [];
+// Manejar zonas_ids: puede venir como array desde formulario o como string desde URL
+// PHP convierte automáticamente name="zonas_ids[]" en $_GET['zonas_ids'] como array
+$zonas_ids = [];
+if (isset($_GET['zonas_ids'])) {
+    if (is_array($_GET['zonas_ids'])) {
+        $zonas_ids = $_GET['zonas_ids'];
+    } elseif (is_string($_GET['zonas_ids']) && !empty($_GET['zonas_ids'])) {
+        // Si viene como string, convertirlo a array
+        $zonas_ids = [$_GET['zonas_ids']];
+    }
+}
+// También verificar si viene como 'zonas_ids[]' desde JavaScript/jQuery (en algunos casos)
+if (empty($zonas_ids) && isset($_GET['zonas_ids[]']) && is_array($_GET['zonas_ids[]'])) {
+    $zonas_ids = $_GET['zonas_ids[]'];
+}
 $fecha_id = $_GET['fecha_id'] ?? null;
 $fecha_numero = $_GET['fecha_numero'] ?? null;
+$fase_id = $_GET['fase_id'] ?? null;
 $temporada = $_GET['temporada'] ?? null;
 
 // Obtener campeonatos activos
-$campeonatos = $db->query("SELECT * FROM campeonatos WHERE activo=1 ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
+// Incluimos el tipo_campeonato y si es nocturno para la lógica de filtros
+$campeonatos = $db->query("SELECT id, nombre, tipo_campeonato, es_torneo_nocturno FROM campeonatos WHERE activo=1 ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
 $categorias = [];
-$formatos = [];
 $zonas = [];
 $fechas = [];
 $partidos = [];
-$tiene_zonas = false;
-$tipo_campeonato = 'comun';
+$tipo_campeonato_seleccionado = null;
+$es_nocturno_seleccionado = false;
+$fases_eliminatorias = [];
+$partidos_eliminatorias = [];
+$fases_para_mostrar = [];
+$fase_invalida = false;
+$hay_partidos_eliminatoria = false;
 
 // Cargar categorías si hay campeonato
 if ($campeonato_id) {
+    // Obtener el tipo del campeonato seleccionado
+    $stmt_tipo = $db->prepare("SELECT tipo_campeonato, es_torneo_nocturno FROM campeonatos WHERE id = ?");
+    $stmt_tipo->execute([$campeonato_id]);
+    $campeonato_info = $stmt_tipo->fetch(PDO::FETCH_ASSOC);
+    $tipo_campeonato_seleccionado = $campeonato_info['tipo_campeonato'] ?? null;
+    $es_nocturno_seleccionado = (bool)($campeonato_info['es_torneo_nocturno'] ?? false);
+
     $stmt = $db->prepare("SELECT * FROM categorias WHERE campeonato_id = ? AND activa = 1 ORDER BY nombre");
     $stmt->execute([$campeonato_id]);
     $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    // Verificar si tiene formato de zonas
-    $stmt = $db->prepare("SELECT COUNT(*) FROM campeonatos_formato WHERE campeonato_id = ?");
-    $stmt->execute([$campeonato_id]);
-    $tiene_zonas = $stmt->fetchColumn() > 0;
-    if ($tiene_zonas) {
-        $tipo_campeonato = 'zonas';
-        $stmt = $db->prepare("SELECT * FROM campeonatos_formato WHERE campeonato_id = ?");
-        $stmt->execute([$campeonato_id]);
-        $formatos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
 }
 
-// Si es campeonato de zonas
-if ($tipo_campeonato === 'zonas' && $formato_id) {
-    // Cargar zonas
-    $stmt = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
-    $stmt->execute([$formato_id]);
-    $zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    // Obtener jornadas disponibles (números únicos) de las zonas seleccionadas
-    if (!empty($zonas_ids)) {
-        $placeholders = str_repeat('?,', count($zonas_ids) - 1) . '?';
-        $stmt = $db->prepare("SELECT DISTINCT jornada_zona FROM partidos WHERE zona_id IN ($placeholders) AND tipo_torneo = 'zona' ORDER BY jornada_zona");
-        $stmt->execute($zonas_ids);
-        $fechas = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        // Cargar partidos si hay jornada seleccionada
-        if ($fecha_numero !== null) {
-            $stmt = $db->prepare("
-                SELECT p.id, el.nombre AS local, ev.nombre AS visitante, 
-                       p.cancha_id, p.hora_partido, p.fecha_partido, p.estado, z.nombre AS zona_nombre
+// Si es campeonato de zonas, cargar las zonas del formato asociado a la categoría
+$formato_id = null;
+if ($tipo_campeonato_seleccionado === 'zonas' && $campeonato_id && $categoria_id) {
+    // Obtener el formato asociado a la categoría seleccionada
+    $stmt = $db->prepare("
+        SELECT cf.id 
+        FROM campeonatos_formato cf
+        JOIN categorias cat ON cf.campeonato_id = cat.campeonato_id
+        WHERE cat.id = ? AND cf.activo = 1
+        LIMIT 1
+    ");
+    $stmt->execute([$categoria_id]);
+    $formato_id = $stmt->fetchColumn();
+    
+    if ($formato_id) {
+        // Cargar las zonas del formato específico de la categoría
+        $stmt = $db->prepare("
+            SELECT z.* 
+            FROM zonas z
+            WHERE z.formato_id = ?
+            ORDER BY z.orden
+        ");
+        $stmt->execute([$formato_id]);
+        $zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Cargar fases eliminatorias del formato específico
+        $fases_eliminatorias = [];
+        $partidos_eliminatorias = [];
+        $stmt = $db->prepare("
+            SELECT fe.* 
+            FROM fases_eliminatorias fe
+            WHERE fe.formato_id = ?
+            ORDER BY fe.orden
+        ");
+        $stmt->execute([$formato_id]);
+        $fases_eliminatorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        if (!empty($fases_eliminatorias)) {
+        foreach ($fases_eliminatorias as $fase) {
+            $ps = $db->prepare("
+                SELECT 
+                    p.id, p.cancha_id, p.hora_partido, p.fecha_partido, p.estado,
+                    p.numero_llave,
+                    el.nombre AS local, ev.nombre AS visitante,
+                    c.nombre AS cancha
                 FROM partidos p
-                JOIN equipos el ON p.equipo_local_id = el.id
-                JOIN equipos ev ON p.equipo_visitante_id = ev.id
-                JOIN zonas z ON p.zona_id = z.id
-                WHERE p.zona_id IN ($placeholders) AND p.jornada_zona = ? AND p.tipo_torneo = 'zona'
-                ORDER BY z.nombre, p.id
+                LEFT JOIN equipos el ON p.equipo_local_id = el.id
+                LEFT JOIN equipos ev ON p.equipo_visitante_id = ev.id
+                LEFT JOIN canchas c ON p.cancha_id = c.id
+                WHERE p.fase_eliminatoria_id = ? AND p.tipo_torneo = 'eliminatoria'
+                ORDER BY p.numero_llave
             ");
-            $params = array_merge($zonas_ids, [$fecha_numero]);
-            $stmt->execute($params);
-            $partidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $ps->execute([$fase['id']]);
+            $partidos_eliminatorias[$fase['id']] = $ps->fetchAll(PDO::FETCH_ASSOC);
         }
     }
-} else if ($tipo_campeonato === 'comun' && $categoria_id) {
+    $fases_para_mostrar = [];
+    $fase_invalida = false;
+    $hay_partidos_eliminatoria = false;
+    if (!empty($fases_eliminatorias)) {
+        if ($fase_id) {
+            foreach ($fases_eliminatorias as $fase) {
+                if ((int)$fase['id'] === (int)$fase_id) {
+                    $fases_para_mostrar[] = $fase;
+                    break;
+                }
+            }
+            if (empty($fases_para_mostrar)) {
+                $fase_invalida = true;
+            }
+        } else {
+            $fases_para_mostrar = $fases_eliminatorias;
+        }
+        foreach ($fases_para_mostrar as $fase) {
+            if (!empty($partidos_eliminatorias[$fase['id']] ?? [])) {
+                $hay_partidos_eliminatoria = true;
+                break;
+            }
+        }
+    }
+    // Crear lista de fechas únicas: obtener todas las fechas distintas de TODAS las zonas del campeonato
+    $fechas = [];
+    if (!empty($zonas)) {
+        // Obtener todas las zonas IDs del campeonato
+        $todas_las_zonas_ids = array_column($zonas, 'id');
+        if (!empty($todas_las_zonas_ids)) {
+            $placeholders = str_repeat('?,', count($todas_las_zonas_ids) - 1) . '?';
+            // Obtener fechas únicas y ordenadas de todas las zonas del campeonato
+            $stmt = $db->prepare("SELECT DISTINCT jornada_zona FROM partidos WHERE zona_id IN ($placeholders) AND tipo_torneo = 'zona' AND jornada_zona IS NOT NULL ORDER BY jornada_zona");
+            $stmt->execute($todas_las_zonas_ids);
+            $fechas_existentes = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            
+            // Asegurar que las fechas sean únicas y estén ordenadas
+            $fechas_existentes = array_unique(array_map('intval', $fechas_existentes));
+            sort($fechas_existentes);
+            
+            if (!empty($fechas_existentes)) {
+                $max_fecha = max($fechas_existentes);
+                // Crear lista secuencial del 1 al máximo (sin duplicados)
+                for ($i = 1; $i <= $max_fecha; $i++) {
+                    $fechas[] = $i;
+                }
+            } else {
+                // Si no hay partidos, mostrar fechas del 1 al 20 por defecto
+                for ($i = 1; $i <= 20; $i++) {
+                    $fechas[] = $i;
+                }
+            }
+        } else {
+            // Si no hay zonas, mostrar fechas del 1 al 20
+            for ($i = 1; $i <= 20; $i++) {
+                $fechas[] = $i;
+            }
+        }
+    } else {
+        // Si no hay zonas, mostrar fechas del 1 al 20
+        for ($i = 1; $i <= 20; $i++) {
+            $fechas[] = $i;
+        }
+    }
+    
+    // Asegurar que las fechas finales sean únicas (por si acaso)
+    $fechas = array_values(array_unique($fechas));
+    sort($fechas);
+    
+    // Cargar partidos si hay zonas seleccionadas y jornada seleccionada
+    if (!empty($zonas_ids) && $fecha_numero !== null) {
+        $placeholders = str_repeat('?,', count($zonas_ids) - 1) . '?';
+        $stmt = $db->prepare("
+            SELECT p.id, el.nombre AS local, ev.nombre AS visitante, 
+                   p.cancha_id, p.hora_partido, p.fecha_partido, p.estado, z.nombre AS zona_nombre
+            FROM partidos p
+            JOIN equipos el ON p.equipo_local_id = el.id
+            JOIN equipos ev ON p.equipo_visitante_id = ev.id
+            JOIN zonas z ON p.zona_id = z.id
+            WHERE p.zona_id IN ($placeholders) AND p.jornada_zona = ? AND p.tipo_torneo = 'zona'
+            ORDER BY z.nombre, p.id
+        ");
+        $params = array_merge($zonas_ids, [$fecha_numero]);
+        $stmt->execute($params);
+        $partidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    }
+} else if (($tipo_campeonato_seleccionado === 'comun' || $es_nocturno_seleccionado) && $categoria_id) {
     // Campeonato común
     $stmt = $db->prepare("SELECT * FROM fechas WHERE categoria_id = ? AND activa = 1 ORDER BY numero_fecha");
     $stmt->execute([$categoria_id]);
@@ -101,17 +231,166 @@ $canchas_all = $db->query("SELECT * FROM canchas WHERE activa = 1 ORDER BY nombr
 
 // AJAX: Recargar solo la sección de partidos y calendario
 if (isset($_GET['ajax_reload_partidos']) && $_GET['ajax_reload_partidos'] == '1') {
-    // Reutilizamos toda la lógica anterior para cargar $partidos, $fecha_programada_sel, etc.
-
+    // Obtener variables necesarias desde GET
+    $ajax_campeonato_id = $_GET['campeonato_id'] ?? null;
+    $ajax_categoria_id = $_GET['categoria_id'] ?? null;
+    // Manejar zonas_ids: puede venir como array desde formulario o como string desde URL
+    // PHP convierte automáticamente name="zonas_ids[]" en $_GET['zonas_ids'] como array
+    $ajax_zonas_ids = [];
+    if (isset($_GET['zonas_ids'])) {
+        if (is_array($_GET['zonas_ids'])) {
+            $ajax_zonas_ids = $_GET['zonas_ids'];
+        } elseif (is_string($_GET['zonas_ids']) && !empty($_GET['zonas_ids'])) {
+            // Si viene como string, convertirlo a array
+            $ajax_zonas_ids = [$_GET['zonas_ids']];
+        }
+    }
+    // También verificar si viene como 'zonas_ids[]' desde JavaScript/jQuery (en algunos casos)
+    if (empty($ajax_zonas_ids) && isset($_GET['zonas_ids[]']) && is_array($_GET['zonas_ids[]'])) {
+        $ajax_zonas_ids = $_GET['zonas_ids[]'];
+    }
+    $ajax_fecha_id = $_GET['fecha_id'] ?? null;
+    $ajax_fecha_numero = $_GET['fecha_numero'] ?? null;
+    $ajax_fase_id = $_GET['fase_id'] ?? null;
+    $ajax_temporada = $_GET['temporada'] ?? null;
+    $ajax_tipo_campeonato = null;
+    $ajax_formato_id = null;
+    $ajax_partidos = [];
+    $ajax_fechas = [];
+    
+    // Obtener tipo de campeonato si hay campeonato_id
+    if ($ajax_campeonato_id) {
+        $stmt_tipo = $db->prepare("SELECT tipo_campeonato FROM campeonatos WHERE id = ?");
+        $stmt_tipo->execute([$ajax_campeonato_id]);
+        $ajax_tipo_campeonato = $stmt_tipo->fetchColumn();
+    }
+    
+    // Obtener formato_id desde categoria_id si es campeonato de zonas
+    if ($ajax_tipo_campeonato === 'zonas' && $ajax_categoria_id) {
+        $stmt = $db->prepare("
+            SELECT cf.id 
+            FROM campeonatos_formato cf
+            JOIN categorias cat ON cf.campeonato_id = cat.campeonato_id
+            WHERE cat.id = ? AND cf.activo = 1
+            LIMIT 1
+        ");
+        $stmt->execute([$ajax_categoria_id]);
+        $ajax_formato_id = $stmt->fetchColumn();
+        
+        // Cargar partidos si hay zonas seleccionadas y jornada
+        if (!empty($ajax_zonas_ids) && $ajax_fecha_numero !== null) {
+            $placeholders = str_repeat('?,', count($ajax_zonas_ids) - 1) . '?';
+            $stmt = $db->prepare("
+                SELECT p.id, el.nombre AS local, ev.nombre AS visitante, 
+                       p.cancha_id, p.hora_partido, p.fecha_partido, p.estado, z.nombre AS zona_nombre
+                FROM partidos p
+                JOIN equipos el ON p.equipo_local_id = el.id
+                JOIN equipos ev ON p.equipo_visitante_id = ev.id
+                JOIN zonas z ON p.zona_id = z.id
+                WHERE p.zona_id IN ($placeholders) AND p.jornada_zona = ? AND p.tipo_torneo = 'zona'
+                ORDER BY z.nombre, p.id
+            ");
+            $params = array_merge($ajax_zonas_ids, [$ajax_fecha_numero]);
+            $stmt->execute($params);
+            $ajax_partidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Obtener jornadas disponibles
+            $placeholders = str_repeat('?,', count($ajax_zonas_ids) - 1) . '?';
+            $stmt = $db->prepare("SELECT DISTINCT jornada_zona FROM partidos WHERE zona_id IN ($placeholders) AND tipo_torneo = 'zona' ORDER BY jornada_zona");
+            $stmt->execute($ajax_zonas_ids);
+            $ajax_fechas = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        }
+    } elseif (($ajax_tipo_campeonato === 'comun') && $ajax_categoria_id) {
+        // Campeonato común
+        $stmt = $db->prepare("SELECT * FROM fechas WHERE categoria_id = ? AND activa = 1 ORDER BY numero_fecha");
+        $stmt->execute([$ajax_categoria_id]);
+        $ajax_fechas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if ($ajax_fecha_id) {
+            $stmt = $db->prepare("
+                SELECT p.id, el.nombre AS local, ev.nombre AS visitante,
+                       p.cancha_id, p.hora_partido, p.fecha_partido, p.estado
+                FROM partidos p
+                JOIN equipos el ON p.equipo_local_id = el.id
+                JOIN equipos ev ON p.equipo_visitante_id = ev.id
+                WHERE p.fecha_id = ?
+                ORDER BY p.id
+            ");
+            $stmt->execute([$ajax_fecha_id]);
+            $ajax_partidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    }
+    
+    // Usar variables locales en lugar de las globales
+    $tipo_campeonato = $ajax_tipo_campeonato;
+    $partidos = $ajax_partidos;
+    $zonas_ids = $ajax_zonas_ids;
+    $fecha_id = $ajax_fecha_id;
+    $fecha_numero = $ajax_fecha_numero;
+    $fase_id = $ajax_fase_id;
+    $temporada = $ajax_temporada;
+    $fechas = $ajax_fechas;
+    
     $fecha_programada_sel = null;
-    if ($tipo_campeonato === 'zonas' && !empty($zonas_ids) && $fecha_numero !== null) {
+    if ($ajax_tipo_campeonato === 'zonas' && !empty($ajax_zonas_ids) && $ajax_fecha_numero !== null) {
         $fs = $db->prepare("SELECT fecha_partido FROM partidos WHERE zona_id = ? AND jornada_zona = ? AND tipo_torneo = 'zona' LIMIT 1");
-        $fs->execute([$zonas_ids[0], $fecha_numero]);
+        $fs->execute([$ajax_zonas_ids[0], $ajax_fecha_numero]);
         $fecha_programada_sel = $fs->fetchColumn();
-    } elseif ($tipo_campeonato === 'comun' && $fecha_id) {
+    } elseif ($ajax_tipo_campeonato === 'comun' && $ajax_fecha_id) {
         $fs = $db->prepare("SELECT fecha_programada FROM fechas WHERE id = ?");
-        $fs->execute([$fecha_id]);
+        $fs->execute([$ajax_fecha_id]);
         $fecha_programada_sel = $fs->fetchColumn();
+    }
+
+    // Preparar datos de eliminatorias también en AJAX
+    $fases_eliminatorias = [];
+    $partidos_eliminatorias = [];
+    if ($ajax_tipo_campeonato === 'zonas' && $ajax_formato_id) {
+        $fsq = $db->prepare("SELECT * FROM fases_eliminatorias WHERE formato_id = ? ORDER BY orden");
+        $fsq->execute([$ajax_formato_id]);
+        $fases_eliminatorias = $fsq->fetchAll(PDO::FETCH_ASSOC);
+        if (!empty($fases_eliminatorias)) {
+            foreach ($fases_eliminatorias as $fase) {
+                $ps = $db->prepare("
+                    SELECT 
+                        p.id, p.cancha_id, p.hora_partido, p.fecha_partido, p.estado,
+                        p.numero_llave,
+                        el.nombre AS local, ev.nombre AS visitante,
+                        c.nombre AS cancha
+                    FROM partidos p
+                    LEFT JOIN equipos el ON p.equipo_local_id = el.id
+                    LEFT JOIN equipos ev ON p.equipo_visitante_id = ev.id
+                    LEFT JOIN canchas c ON p.cancha_id = c.id
+                    WHERE p.fase_eliminatoria_id = ? AND p.tipo_torneo = 'eliminatoria'
+                    ORDER BY p.numero_llave
+                ");
+                $ps->execute([$fase['id']]);
+                $partidos_eliminatorias[$fase['id']] = $ps->fetchAll(PDO::FETCH_ASSOC);
+            }
+        }
+        $fases_para_mostrar = [];
+        $fase_invalida = false;
+        $hay_partidos_eliminatoria = false;
+        if (!empty($fases_eliminatorias)) {
+            if ($fase_id) {
+                foreach ($fases_eliminatorias as $fase) {
+                    if ((int)$fase['id'] === (int)$fase_id) {
+                        $fases_para_mostrar[] = $fase;
+                        break;
+                    }
+                }
+                if (empty($fases_para_mostrar)) {
+                    $fase_invalida = true;
+                }
+            } else {
+                $fases_para_mostrar = $fases_eliminatorias;
+            }
+            foreach ($fases_para_mostrar as $fase) {
+                if (!empty($partidos_eliminatorias[$fase['id']] ?? [])) {
+                    $hay_partidos_eliminatoria = true;
+                    break;
+                }
+            }
+        }
     }
 
     ob_start();
@@ -257,10 +536,10 @@ if (isset($_GET['ajax_reload_partidos']) && $_GET['ajax_reload_partidos'] == '1'
                                 $oc_stmt = $db->prepare("SELECT hora_partido FROM partidos WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL");
                                 $oc_stmt->execute([$cancha['id'], $fecha_programada_sel]);
                                 $ocupados_cancha = $oc_stmt->fetchAll(PDO::FETCH_COLUMN);
-                                $oc_stmt_zona = $db->prepare("SELECT hora_partido FROM partidos_zona WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL");
-                                $oc_stmt_zona->execute([$cancha['id'], $fecha_programada_sel]);
-                                $ocupados_zona = $oc_stmt_zona->fetchAll(PDO::FETCH_COLUMN);
-                                $todos_ocupados = array_merge($ocupados_cancha, $ocupados_zona);
+                                $oc_stmt_eliminatoria = $db->prepare("SELECT hora_partido FROM partidos WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL AND tipo_torneo IN ('zona', 'eliminatoria')");
+                                $oc_stmt_eliminatoria->execute([$cancha['id'], $fecha_programada_sel]);
+                                $ocupados_otros = $oc_stmt_eliminatoria->fetchAll(PDO::FETCH_COLUMN);
+                                $todos_ocupados = array_unique(array_merge($ocupados_cancha, $ocupados_otros));
                                 foreach ($horarios_cancha as $hora) {
                                     if (in_array($hora, $todos_ocupados)) {
                                         echo "<div class='bloque ocupado'>{$hora}</div>";
@@ -278,10 +557,161 @@ if (isset($_GET['ajax_reload_partidos']) && $_GET['ajax_reload_partidos'] == '1'
                     </div>
                 </div>
             </div>
-        <?php else: ?>
+        <?php elseif (empty($fases_para_mostrar)): ?>
             <div class="alert alert-info">
                 <i class="fas fa-info-circle"></i> No hay partidos para mostrar.
             </div>
+        <?php endif; ?>
+
+        <?php if ($fase_invalida): ?>
+            <div class="alert alert-warning mt-3">
+                <i class="fas fa-exclamation-triangle"></i> La fase eliminatoria seleccionada no es válida.
+            </div>
+        <?php endif; ?>
+
+        <?php if (!empty($fases_para_mostrar)): ?>
+        <!-- ELIMINATORIAS -->
+        <div class="card mt-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="fas fa-trophy"></i> Eliminatorias</h5>
+            </div>
+            <div class="card-body">
+                <?php
+                $nombre_fase = [
+                    'dieciseisavos' => 'Dieciseisavos de Final',
+                    'octavos' => 'Octavos de Final',
+                    'cuartos' => 'Cuartos de Final',
+                    'semifinal' => 'Semifinales',
+                    'final' => 'Final',
+                    'tercer_puesto' => 'Tercer Puesto'
+                ];
+                ?>
+                <?php foreach ($fases_para_mostrar as $fase): ?>
+                    <div class="mb-4">
+                        <h6 class="fw-bold"><?= htmlspecialchars($nombre_fase[$fase['nombre']] ?? $fase['nombre']) ?></h6>
+                        <?php $lista = $partidos_eliminatorias[$fase['id']] ?? []; ?>
+                        <?php
+                            $fecha_sugerida = null;
+                            foreach ($lista as $match_tmp) {
+                                if (!empty($match_tmp['fecha_partido'])) {
+                                    $fecha_sugerida = $match_tmp['fecha_partido'];
+                                    break;
+                                }
+                            }
+                        ?>
+                        <?php if (!empty($lista)): ?>
+                        <div class="card border-info mb-3">
+                            <div class="card-body">
+                                <form method="POST" class="auto-assign-eliminatoria-form">
+                                    <input type="hidden" name="tipo_campeonato" value="eliminatoria">
+                                    <input type="hidden" name="fase_id" value="<?= $fase['id'] ?>">
+                                    <input type="hidden" name="temporada" value="<?= htmlspecialchars($temporada) ?>">
+                                    <div class="row g-3 align-items-end">
+                                        <div class="col-md-3">
+                                            <label class="form-label">Fecha</label>
+                                            <input type="date" name="fecha_programada" class="form-control" value="<?= htmlspecialchars($fecha_sugerida ?? '') ?>" required>
+                                        </div>
+                                        <div class="col-md-9">
+                                            <label class="form-label">Canchas disponibles</label>
+                                            <div class="d-flex flex-wrap gap-2">
+                                                <?php
+                                                if (($fecha_sugerida ?? null) && $temporada) {
+                                                    foreach ($canchas_all as $cancha) {
+                                                        if (canchaTieneHorarioLibre($db, $cancha['id'], $fecha_sugerida, $temporada)) {
+                                                            echo '<div class="form-check me-2">';
+                                                            echo '<input class="form-check-input" type="checkbox" name="canchas[]" value="' . $cancha['id'] . '" id="elimcancha' . $fase['id'] . '_' . $cancha['id'] . '">';
+                                                            echo '<label class="form-check-label" for="elimcancha' . $fase['id'] . '_' . $cancha['id'] . '">' . htmlspecialchars($cancha['nombre']) . '</label>';
+                                                            echo '</div>';
+                                                        }
+                                                    }
+                                                } else {
+                                                    foreach ($canchas_all as $cancha) {
+                                                        echo '<div class="form-check me-2">';
+                                                        echo '<input class="form-check-input" type="checkbox" name="canchas[]" value="' . $cancha['id'] . '" id="elimcancha' . $fase['id'] . '_' . $cancha['id'] . '">';
+                                                        echo '<label class="form-check-label" for="elimcancha' . $fase['id'] . '_' . $cancha['id'] . '">' . htmlspecialchars($cancha['nombre']) . '</label>';
+                                                        echo '</div>';
+                                                    }
+                                                }
+                                                ?>
+                                            </div>
+                                            <?php if (empty($temporada)): ?>
+                                                <div class="text-muted small mt-2"><i class="fas fa-info-circle"></i> Selecciona una temporada para filtrar horarios disponibles.</div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-success mt-3 btn-auto-assign-elim">
+                                        <i class="fas fa-magic"></i> Asignación Automática
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        <?php if (empty($lista)): ?>
+                            <div class="text-muted mb-3"><i class="fas fa-info-circle"></i> Sin partidos aún.</div>
+                        <?php else: ?>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Llave</th>
+                                            <th>Local</th>
+                                            <th>Visitante</th>
+                                            <th>Cancha</th>
+                                            <th>Fecha</th>
+                                            <th>Hora</th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($lista as $p): ?>
+                                        <tr id="row-<?= $p['id'] ?>">
+                                            <td><?= $p['id'] ?></td>
+                                            <td><span class="badge bg-secondary">#<?= (int)($p['numero_llave'] ?? 0) ?></span></td>
+                                            <td><?= htmlspecialchars($p['local'] ?? 'Por definir') ?></td>
+                                            <td><?= htmlspecialchars($p['visitante'] ?? 'Por definir') ?></td>
+                                            <td>
+                                                <select class="form-select manual-cancha" data-partido="<?= $p['id'] ?>">
+                                                    <option value="">-- Seleccionar --</option>
+                                                    <?php foreach ($canchas_all as $cancha): ?>
+                                                        <option value="<?= $cancha['id'] ?>" <?= ($p['cancha_id'] == $cancha['id']) ? 'selected' : '' ?>>
+                                                            <?= htmlspecialchars($cancha['nombre']) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </td>
+                                            <td>
+                                                <input type="date" class="form-control manual-fecha" value="<?= $p['fecha_partido'] ?? $fecha_programada_sel ?>" data-partido="<?= $p['id'] ?>">
+                                            </td>
+                                            <td>
+                                                <input list="horarios<?= $p['id'] ?>" class="form-control manual-hora" value="<?= $p['hora_partido'] ?>" data-partido="<?= $p['id'] ?>">
+                                                <datalist id="horarios<?= $p['id'] ?>">
+                                                    <?php
+                                                    if (!empty($p['cancha_id']) && $temporada) {
+                                                        $hh = $db->prepare("SELECT hora FROM horarios_canchas WHERE cancha_id = ? AND temporada = ? AND activa = 1 ORDER BY hora");
+                                                        $hh->execute([$p['cancha_id'], $temporada]);
+                                                        foreach ($hh->fetchAll(PDO::FETCH_COLUMN) as $opt_h) {
+                                                            echo "<option value=\"{$opt_h}\">";
+                                                        }
+                                                    }
+                                                    ?>
+                                                </datalist>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-primary btn-sm guardar-manual" data-partido="<?= $p['id'] ?>" data-tipo="eliminatoria">
+                                                    <i class="fas fa-save"></i> Guardar
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
         <?php endif; ?>
     </div>
     <?php
@@ -310,10 +740,10 @@ if (isset($_GET['ajax_calendar']) && $_GET['ajax_calendar'] == '1') {
         $oc_stmt = $db->prepare("SELECT hora_partido FROM partidos WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL");
         $oc_stmt->execute([$cancha['id'], $fecha_programada_ajax]);
         $ocupados_cancha = $oc_stmt->fetchAll(PDO::FETCH_COLUMN);
-        $oc_stmt_zona = $db->prepare("SELECT hora_partido FROM partidos_zona WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL");
-        $oc_stmt_zona->execute([$cancha['id'], $fecha_programada_ajax]);
-        $ocupados_zona = $oc_stmt_zona->fetchAll(PDO::FETCH_COLUMN);
-        $ocupados_cancha = array_merge($ocupados_cancha, $ocupados_zona);
+        $oc_stmt_eliminatoria = $db->prepare("SELECT hora_partido FROM partidos WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL AND tipo_torneo IN ('zona', 'eliminatoria')");
+        $oc_stmt_eliminatoria->execute([$cancha['id'], $fecha_programada_ajax]);
+        $ocupados_otros = $oc_stmt_eliminatoria->fetchAll(PDO::FETCH_COLUMN);
+        $ocupados_cancha = array_unique(array_merge($ocupados_cancha, $ocupados_otros));
         foreach ($horarios_cancha as $hora) {
             if (in_array($hora, $ocupados_cancha)) {
                 echo "<div class='bloque ocupado'>{$hora}</div>";
@@ -410,6 +840,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['asignar_auto_ajax']))
             ");
             $params = array_merge($post_zonas_ids, [$post_fecha_numero]);
             $pstmt->execute($params);
+        } elseif ($post_tipo === 'eliminatoria') {
+            $post_fase_id = $_POST['fase_id'] ?? null;
+            if (!$post_fase_id) {
+                throw new Exception('Fase eliminatoria requerida.');
+            }
+            $pstmt = $db->prepare("
+                SELECT p.id, el.nombre as local, ev.nombre as visitante
+                FROM partidos p
+                LEFT JOIN equipos el ON el.id = p.equipo_local_id
+                LEFT JOIN equipos ev ON ev.id = p.equipo_visitante_id
+                WHERE p.fase_eliminatoria_id = ? AND p.tipo_torneo = 'eliminatoria'
+                  AND (p.cancha_id IS NULL OR p.hora_partido IS NULL OR p.fecha_partido IS NULL)
+                ORDER BY p.numero_llave
+            ");
+            $pstmt->execute([$post_fase_id]);
         } else {
             $post_fecha_id = $_POST['fecha_id'] ?? null;
             if (!$post_fecha_id) {
@@ -437,13 +882,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['asignar_auto_ajax']))
 
             $oc_stmt = $db->prepare("SELECT hora_partido FROM partidos WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL");
             $oc_stmt->execute([$cid, $post_fecha_programada]);
-            $ocupados = $oc_stmt->fetchAll(PDO::FETCH_COLUMN);
-
-            $oc_stmt_zona = $db->prepare("SELECT hora_partido FROM partidos WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL AND tipo_torneo = 'zona'");
-            $oc_stmt_zona->execute([$cid, $post_fecha_programada]);
-            $ocupados_zona = $oc_stmt_zona->fetchAll(PDO::FETCH_COLUMN);
-
-            $todos_ocupados = array_merge($ocupados, $ocupados_zona);
+            $todos_ocupados = $oc_stmt->fetchAll(PDO::FETCH_COLUMN);
             $ocupados_map = array_flip($todos_ocupados);
             foreach ($horarios as $hora) {
                 if (!isset($ocupados_map[$hora])) {
@@ -491,11 +930,7 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
     if (empty($horarios)) return false;
     $oc_stmt = $db->prepare("SELECT hora_partido FROM partidos WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL");
     $oc_stmt->execute([$cancha_id, $fecha_programada]);
-    $ocupados = $oc_stmt->fetchAll(PDO::FETCH_COLUMN);
-    $oc_stmt_zona = $db->prepare("SELECT hora_partido FROM partidos WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL AND tipo_torneo = 'zona'");
-    $oc_stmt_zona->execute([$cancha_id, $fecha_programada]);
-    $ocupados_zona = $oc_stmt_zona->fetchAll(PDO::FETCH_COLUMN);
-    $todos_ocupados = array_merge($ocupados, $ocupados_zona);
+    $todos_ocupados = $oc_stmt->fetchAll(PDO::FETCH_COLUMN);
     $ocupados_map = array_flip($todos_ocupados);
     foreach ($horarios as $h) {
         if (!isset($ocupados_map[$h])) return true;
@@ -578,22 +1013,24 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <?php if ($campeonato_id && $tipo_campeonato === 'zonas'): ?>
+                        <?php if ($campeonato_id): ?>
                             <div class="col-md-3">
-                                <label class="form-label">Formato</label>
-                                <select name="formato_id" class="form-select" onchange="this.form.submit()">
+                                <label class="form-label">Categoría</label>
+                                <select name="categoria_id" class="form-select" onchange="this.form.submit()">
                                     <option value="">Seleccionar</option>
-                                    <?php foreach ($formatos as $fmt): ?>
-                                        <option value="<?= $fmt['id'] ?>" <?= ($formato_id == $fmt['id']) ? 'selected' : '' ?>>
-                                            <?= $fmt['cantidad_zonas'] ?> Zonas
+                                    <?php foreach ($categorias as $cat): ?>
+                                        <option value="<?= $cat['id'] ?>" <?= ($categoria_id == $cat['id']) ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($cat['nombre']) ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <?php if ($formato_id): ?>
+                        <?php endif; ?>
+                        <?php if ($campeonato_id && $tipo_campeonato_seleccionado === 'zonas' && !$es_nocturno_seleccionado && $categoria_id): // BLOQUE ZONAS ?>
+                            <?php if (!empty($zonas)): // Mostrar las zonas del formato de la categoría ?>
                             <div class="col-md-12 mt-3">
                                 <label class="form-label fw-bold">
-                                    <i class="fas fa-layer-group"></i> Seleccionar Zonas (una o varias)
+                                    <i class="fas fa-layer-group"></i> Seleccionar Zonas
                                 </label>
                                 <div class="d-flex flex-wrap gap-2">
                                     <?php foreach ($zonas as $zona): ?>
@@ -609,36 +1046,49 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
                                     <?php endforeach; ?>
                                 </div>
                                 <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="aplicarZonas">
-                                    <i class="fas fa-check"></i> Aplicar Selección
+                                    <i class="fas fa-check"></i> Aplicar Selección de Zonas
                                 </button>
                             </div>
-                            <?php if (!empty($zonas_ids)): ?>
+                            <?php endif; ?>
+                            
+                            <?php if (!empty($zonas)): // Mostrar FECHAS siempre que haya zonas disponibles ?>
                             <div class="col-md-3 mt-3">
-                                <label class="form-label">Jornada</label>
+                                <label class="form-label">Fecha</label>
                                 <select name="fecha_numero" class="form-select" onchange="this.form.submit()">
                                     <option value="">Seleccionar</option>
                                     <?php foreach ($fechas as $fn): ?>
                                         <option value="<?= $fn ?>" <?= ($fecha_numero == $fn) ? 'selected' : '' ?>>
-                                            Jornada <?= $fn ?>
+                                            Fecha <?= $fn ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
                             <?php endif; ?>
-                            <?php endif; ?>
-                        <?php elseif ($campeonato_id && $tipo_campeonato === 'comun'): ?>
-                            <div class="col-md-3">
-                                <label class="form-label">Categoría</label>
-                                <select name="categoria_id" class="form-select" onchange="this.form.submit()">
+                            <?php if (!empty($fases_eliminatorias)): ?>
+                            <div class="col-md-3 mt-3">
+                                <label class="form-label">Fase Eliminatoria</label>
+                                <select name="fase_id" class="form-select" onchange="this.form.submit()">
                                     <option value="">Seleccionar</option>
-                                    <?php foreach ($categorias as $cat): ?>
-                                        <option value="<?= $cat['id'] ?>" <?= ($categoria_id == $cat['id']) ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars($cat['nombre']) ?>
+                                    <?php
+                                    $nombre_fase_opts = [
+                                        'dieciseisavos' => 'Dieciseisavos de Final',
+                                        'octavos' => 'Octavos de Final',
+                                        'cuartos' => 'Cuartos de Final',
+                                        'semifinal' => 'Semifinales',
+                                        'final' => 'Final',
+                                        'tercer_puesto' => 'Tercer Puesto'
+                                    ];
+                                    foreach ($fases_eliminatorias as $fase):
+                                    ?>
+                                        <option value="<?= $fase['id'] ?>" <?= ($fase_id == $fase['id']) ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($nombre_fase_opts[$fase['nombre']] ?? $fase['nombre']) ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <?php if ($categoria_id): ?>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                        <?php if ($campeonato_id && ($tipo_campeonato_seleccionado === 'comun' || $es_nocturno_seleccionado) && $categoria_id): ?>
                             <div class="col-md-3">
                                 <label class="form-label">Fecha</label>
                                 <select name="fecha_id" class="form-select" onchange="this.form.submit()">
@@ -650,7 +1100,6 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <?php endif; ?>
                         <?php endif; ?>
                         <div class="col-md-3">
                             <label class="form-label">Temporada</label>
@@ -667,7 +1116,28 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
 
         <!-- SECCIÓN DINÁMICA DE PARTIDOS -->
         <div id="partidosSection">
-            <?php if (!empty($partidos)): ?>
+            <?php
+            // Calcular fecha programada para zonas
+            $fecha_programada_sel = null;
+            if ($tipo_campeonato_seleccionado === 'zonas' && !empty($zonas_ids) && $fecha_numero !== null) {
+                // Intentar obtener fecha de los partidos existentes
+                $fs = $db->prepare("SELECT fecha_partido FROM partidos WHERE zona_id = ? AND jornada_zona = ? AND tipo_torneo = 'zona' AND fecha_partido IS NOT NULL LIMIT 1");
+                $fs->execute([$zonas_ids[0], $fecha_numero]);
+                $fecha_programada_sel = $fs->fetchColumn();
+                // Si no hay fecha en los partidos, usar la fecha actual como predeterminada
+                if (!$fecha_programada_sel) {
+                    $fecha_programada_sel = date('Y-m-d');
+                }
+            } elseif ($tipo_campeonato_seleccionado === 'comun' && $fecha_id) {
+                $fs = $db->prepare("SELECT fecha_programada FROM fechas WHERE id = ?");
+                $fs->execute([$fecha_id]);
+                $fecha_programada_sel = $fs->fetchColumn();
+            }
+            
+            // Crear variable local para compatibilidad con el código existente
+            $tipo_campeonato = $tipo_campeonato_seleccionado;
+            ?>
+            <?php if ($tipo_campeonato_seleccionado === 'zonas' && !empty($zonas_ids) && $fecha_numero !== null && $temporada): ?>
                 <!-- ASIGNACIÓN AUTOMÁTICA -->
                 <div class="card mb-4">
                     <div class="card-header bg-success text-white">
@@ -678,52 +1148,45 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
                             <input type="hidden" name="tipo_campeonato" value="<?= $tipo_campeonato ?>">
                             <input type="hidden" name="temporada" value="<?= htmlspecialchars($temporada) ?>">
                             <?php 
-                            $fecha_programada_sel = null;
-                            if ($tipo_campeonato === 'zonas' && !empty($zonas_ids) && $fecha_numero !== null) {
-                                $fs = $db->prepare("SELECT fecha_partido FROM partidos WHERE zona_id = ? AND jornada_zona = ? AND tipo_torneo = 'zona' LIMIT 1");
-                                $fs->execute([$zonas_ids[0], $fecha_numero]);
-                                $fecha_programada_sel = $fs->fetchColumn();
-                                foreach ($zonas_ids as $zid) {
-                                    echo '<input type="hidden" name="zonas_ids[]" value="' . $zid . '">';
-                                }
-                                echo '<input type="hidden" name="fecha_numero" value="' . $fecha_numero . '">';
-                            } elseif ($tipo_campeonato === 'comun' && $fecha_id) {
-                                $fs = $db->prepare("SELECT fecha_programada FROM fechas WHERE id = ?");
-                                $fs->execute([$fecha_id]);
-                                $fecha_programada_sel = $fs->fetchColumn();
-                                echo '<input type="hidden" name="fecha_id" value="' . $fecha_id . '">';
+                            foreach ($zonas_ids as $zid) {
+                                echo '<input type="hidden" name="zonas_ids[]" value="' . $zid . '">';
                             }
+                            echo '<input type="hidden" name="fecha_numero" value="' . $fecha_numero . '">';
                             ?>
-                            <input type="hidden" name="fecha_programada" value="<?= htmlspecialchars($fecha_programada_sel) ?>">
                             <div class="row">
                                 <div class="col-md-12">
-                                    <label class="form-label">Seleccionar Canchas (sólo con horarios libres)</label>
+                                    <label class="form-label">Fecha de Partidos</label>
+                                    <input type="date" name="fecha_programada" class="form-control mb-3" value="<?= htmlspecialchars($fecha_programada_sel) ?>" id="fechaProgramadaInput" required>
+                                </div>
+                                <div class="col-md-12">
+                                    <label class="form-label">Seleccionar Canchas</label>
                                     <div class="d-flex flex-wrap gap-2">
                                         <?php
-                                        if ($fecha_programada_sel && $temporada) {
-                                            foreach ($canchas_all as $cancha) {
-                                                if (canchaTieneHorarioLibre($db, $cancha['id'], $fecha_programada_sel, $temporada)) {
-                                                    echo '<div class="form-check me-2">';
-                                                    echo '<input class="form-check-input" type="checkbox" name="canchas[]" value="' . $cancha['id'] . '" id="cancha' . $cancha['id'] . '">';
-                                                    echo '<label class="form-check-label" for="cancha' . $cancha['id'] . '">' . htmlspecialchars($cancha['nombre']) . '</label>';
-                                                    echo '</div>';
-                                                }
-                                            }
-                                        } else {
-                                            echo '<div class="alert alert-info">Selecciona fecha y temporada.</div>';
+                                        foreach ($canchas_all as $cancha) {
+                                            echo '<div class="form-check me-2">';
+                                            echo '<input class="form-check-input" type="checkbox" name="canchas[]" value="' . $cancha['id'] . '" id="cancha' . $cancha['id'] . '">';
+                                            echo '<label class="form-check-label" for="cancha' . $cancha['id'] . '">' . htmlspecialchars($cancha['nombre']) . '</label>';
+                                            echo '</div>';
                                         }
                                         ?>
                                     </div>
                                 </div>
                             </div>
+                            <?php if (!empty($partidos)): ?>
                             <button type="button" id="btnAutoAssign" class="btn btn-success mt-3">
                                 <i class="fas fa-magic"></i> Asignación Automática
                             </button>
+                            <?php else: ?>
+                            <div class="alert alert-info mt-3">
+                                <i class="fas fa-info-circle"></i> No hay partidos para la fecha y zonas seleccionadas. Asegúrate de que los partidos estén generados para estas zonas y fecha.
+                            </div>
+                            <?php endif; ?>
                         </form>
                     </div>
                 </div>
 
                 <!-- TABLA DE PARTIDOS -->
+                <?php if (!empty($partidos)): ?>
                 <div class="card mb-4">
                     <div class="card-header bg-info text-white">
                         <h5 class="mb-0"><i class="fas fa-list"></i> Partidos - Asignación Manual</h5>
@@ -793,6 +1256,7 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
                 </div>
 
                 <!-- CALENDARIO VISUAL -->
+                <?php if ($fecha_programada_sel && $temporada): ?>
                 <div class="card">
                     <div class="card-header bg-secondary text-white">
                         <h5 class="mb-0"><i class="fas fa-calendar"></i> Calendario Visual (Temporada: <?= htmlspecialchars($temporada ?: '—') ?>)</h5>
@@ -800,44 +1264,193 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
                     <div class="card-body">
                         <div id="calendarContainer">
                             <?php
-                            if ($fecha_programada_sel && $temporada) {
-                                echo '<div class="row">';
-                                foreach ($canchas_all as $cancha) {
-                                    echo '<div class="col-md-3">';
-                                    echo '<div class="card mb-3">';
-                                    echo '<div class="card-header">' . htmlspecialchars($cancha['nombre']) . '</div>';
-                                    echo '<div class="card-body p-2" style="min-height:100px;">';
-                                    $hstmt = $db->prepare("SELECT hora FROM horarios_canchas WHERE cancha_id = ? AND temporada = ? AND activa = 1 ORDER BY hora");
-                                    $hstmt->execute([$cancha['id'], $temporada]);
-                                    $horarios_cancha = $hstmt->fetchAll(PDO::FETCH_COLUMN);
-                                    $oc_stmt = $db->prepare("SELECT hora_partido FROM partidos WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL");
-                                    $oc_stmt->execute([$cancha['id'], $fecha_programada_sel]);
-                                    $ocupados_cancha = $oc_stmt->fetchAll(PDO::FETCH_COLUMN);
-                                    $oc_stmt_zona = $db->prepare("SELECT hora_partido FROM partidos WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL AND tipo_torneo = 'zona'");
-                                    $oc_stmt_zona->execute([$cancha['id'], $fecha_programada_sel]);
-                                    $ocupados_zona = $oc_stmt_zona->fetchAll(PDO::FETCH_COLUMN);
-                                    $todos_ocupados = array_merge($ocupados_cancha, $ocupados_zona);
-                                    foreach ($horarios_cancha as $hora) {
-                                        if (in_array($hora, $todos_ocupados)) {
-                                            echo "<div class='bloque ocupado'>{$hora}</div>";
-                                        } else {
-                                            echo "<div class='bloque disponible'>{$hora}</div>";
-                                        }
+                            echo '<div class="row">';
+                            foreach ($canchas_all as $cancha) {
+                                echo '<div class="col-md-3">';
+                                echo '<div class="card mb-3">';
+                                echo '<div class="card-header">' . htmlspecialchars($cancha['nombre']) . '</div>';
+                                echo '<div class="card-body p-2" style="min-height:100px;">';
+                                $hstmt = $db->prepare("SELECT hora FROM horarios_canchas WHERE cancha_id = ? AND temporada = ? AND activa = 1 ORDER BY hora");
+                                $hstmt->execute([$cancha['id'], $temporada]);
+                                $horarios_cancha = $hstmt->fetchAll(PDO::FETCH_COLUMN);
+                                $oc_stmt = $db->prepare("SELECT hora_partido FROM partidos WHERE cancha_id = ? AND fecha_partido = ? AND hora_partido IS NOT NULL");
+                                $oc_stmt->execute([$cancha['id'], $fecha_programada_sel]);
+                                $todos_ocupados = $oc_stmt->fetchAll(PDO::FETCH_COLUMN);
+                                foreach ($horarios_cancha as $hora) {
+                                    if (in_array($hora, $todos_ocupados)) {
+                                        echo "<div class='bloque ocupado'>{$hora}</div>";
+                                    } else {
+                                        echo "<div class='bloque disponible'>{$hora}</div>";
                                     }
-                                    echo '</div></div></div>';
                                 }
-                                echo '</div>';
-                            } else {
-                                echo '<div class="alert alert-info">Selecciona fecha y temporada para mostrar el calendario.</div>';
+                                echo '</div></div></div>';
                             }
+                            echo '</div>';
                             ?>
                         </div>
                     </div>
                 </div>
-            <?php else: ?>
+                <?php endif; ?>
+            <?php elseif ($tipo_campeonato_seleccionado === 'zonas' && !empty($zonas_ids) && $fecha_numero !== null && !$temporada): ?>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> Selecciona una temporada para poder asignar canchas y horarios.
+                </div>
+            <?php elseif ($tipo_campeonato_seleccionado === 'zonas' && (empty($zonas_ids) || $fecha_numero === null)): ?>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> Selecciona zonas y fecha para ver los partidos y asignar canchas/horarios.
+                </div>
+            <?php elseif (empty($fases_para_mostrar) && $tipo_campeonato_seleccionado !== 'zonas'): ?>
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle"></i> No hay partidos para mostrar.
                 </div>
+            <?php endif; ?>
+
+            <?php if ($fase_invalida): ?>
+                <div class="alert alert-warning mt-3">
+                    <i class="fas fa-exclamation-triangle"></i> La fase eliminatoria seleccionada no es válida.
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($fases_para_mostrar)): ?>
+            <!-- ELIMINATORIAS -->
+            <div class="card mt-4">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-trophy"></i> Eliminatorias</h5>
+                </div>
+                <div class="card-body">
+                    <?php
+                    $nombre_fase = [
+                        'dieciseisavos' => 'Dieciseisavos de Final',
+                        'octavos' => 'Octavos de Final',
+                        'cuartos' => 'Cuartos de Final',
+                        'semifinal' => 'Semifinales',
+                        'final' => 'Final',
+                        'tercer_puesto' => 'Tercer Puesto'
+                    ];
+                    ?>
+                    <?php foreach ($fases_para_mostrar as $fase): ?>
+                        <div class="mb-4">
+                            <h6 class="fw-bold"><?= htmlspecialchars($nombre_fase[$fase['nombre']] ?? $fase['nombre']) ?></h6>
+                            <?php $lista = $partidos_eliminatorias[$fase['id']] ?? []; ?>
+                            <?php
+                                $fecha_sugerida_main = null;
+                                foreach ($lista as $match_tmp) {
+                                    if (!empty($match_tmp['fecha_partido'])) {
+                                        $fecha_sugerida_main = $match_tmp['fecha_partido'];
+                                        break;
+                                    }
+                                }
+                            ?>
+                            <!-- Formulario de asignación automática para eliminatorias -->
+                            <div class="card border-info mb-3">
+                                <div class="card-body">
+                                    <form method="POST" class="auto-assign-eliminatoria-form">
+                                        <input type="hidden" name="tipo_campeonato" value="eliminatoria">
+                                        <input type="hidden" name="fase_id" value="<?= $fase['id'] ?>">
+                                        <input type="hidden" name="temporada" value="<?= htmlspecialchars($temporada) ?>">
+                                        <div class="row g-3 align-items-end">
+                                            <div class="col-md-3">
+                                                <label class="form-label">Fecha</label>
+                                                <input type="date" name="fecha_programada" class="form-control" value="<?= htmlspecialchars($fecha_sugerida_main ?? '') ?>" required>
+                                            </div>
+                                            <div class="col-md-9">
+                                                <label class="form-label">Canchas disponibles</label>
+                                                <div class="d-flex flex-wrap gap-2">
+                                                    <?php
+                                                    // Mostrar siempre todas las canchas cuando se selecciona una fase
+                                                    foreach ($canchas_all as $cancha) {
+                                                        echo '<div class="form-check me-2">';
+                                                        echo '<input class="form-check-input" type="checkbox" name="canchas[]" value="' . $cancha['id'] . '" id="elimcancha_main' . $fase['id'] . '_' . $cancha['id'] . '">';
+                                                        echo '<label class="form-check-label" for="elimcancha_main' . $fase['id'] . '_' . $cancha['id'] . '">' . htmlspecialchars($cancha['nombre']) . '</label>';
+                                                        echo '</div>';
+                                                    }
+                                                    ?>
+                                                </div>
+                                                <?php if (empty($temporada)): ?>
+                                                    <div class="text-muted small mt-2"><i class="fas fa-info-circle"></i> Selecciona una temporada para filtrar horarios disponibles.</div>
+                                                <?php else: ?>
+                                                    <div class="text-muted small mt-2"><i class="fas fa-info-circle"></i> Selecciona una fecha para ver canchas disponibles.</div>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                        <?php if (!empty($lista)): ?>
+                                        <button type="button" class="btn btn-success mt-3 btn-auto-assign-elim">
+                                            <i class="fas fa-magic"></i> Asignación Automática
+                                        </button>
+                                        <?php else: ?>
+                                        <div class="alert alert-info mt-3">
+                                            <i class="fas fa-info-circle"></i> No hay partidos en esta fase para asignar.
+                                        </div>
+                                        <?php endif; ?>
+                                    </form>
+                                </div>
+                            </div>
+                            <?php if (empty($lista)): ?>
+                                <div class="text-muted mb-3"><i class="fas fa-info-circle"></i> Sin partidos aún.</div>
+                            <?php else: ?>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-hover align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Llave</th>
+                                                <th>Local</th>
+                                                <th>Visitante</th>
+                                                <th>Cancha</th>
+                                                <th>Fecha</th>
+                                                <th>Hora</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($lista as $p): ?>
+                                            <tr id="row-<?= $p['id'] ?>">
+                                                <td><?= $p['id'] ?></td>
+                                                <td><span class="badge bg-secondary">#<?= (int)($p['numero_llave'] ?? 0) ?></span></td>
+                                                <td><?= htmlspecialchars($p['local'] ?? 'Por definir') ?></td>
+                                                <td><?= htmlspecialchars($p['visitante'] ?? 'Por definir') ?></td>
+                                                <td>
+                                                    <select class="form-select manual-cancha" data-partido="<?= $p['id'] ?>">
+                                                        <option value="">-- Seleccionar --</option>
+                                                        <?php foreach ($canchas_all as $cancha): ?>
+                                                            <option value="<?= $cancha['id'] ?>" <?= ($p['cancha_id'] == $cancha['id']) ? 'selected' : '' ?>>
+                                                                <?= htmlspecialchars($cancha['nombre']) ?>
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </td>
+                                                <td>
+                                                    <input type="date" class="form-control manual-fecha" value="<?= $p['fecha_partido'] ?? $fecha_programada_sel ?>" data-partido="<?= $p['id'] ?>">
+                                                </td>
+                                                <td>
+                                                    <input list="horarios<?= $p['id'] ?>" class="form-control manual-hora" value="<?= $p['hora_partido'] ?>" data-partido="<?= $p['id'] ?>">
+                                                    <datalist id="horarios<?= $p['id'] ?>">
+                                                        <?php
+                                                        if (!empty($p['cancha_id']) && $temporada) {
+                                                            $hh = $db->prepare("SELECT hora FROM horarios_canchas WHERE cancha_id = ? AND temporada = ? AND activa = 1 ORDER BY hora");
+                                                            $hh->execute([$p['cancha_id'], $temporada]);
+                                                            foreach ($hh->fetchAll(PDO::FETCH_COLUMN) as $opt_h) {
+                                                                echo "<option value=\"{$opt_h}\">";
+                                                            }
+                                                        }
+                                                        ?>
+                                                    </datalist>
+                                                </td>
+                                                <td>
+                                                    <button class="btn btn-primary btn-sm guardar-manual" data-partido="<?= $p['id'] ?>" data-tipo="eliminatoria">
+                                                        <i class="fas fa-save"></i> Guardar
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
             <?php endif; ?>
         </div>
     </div>
@@ -878,12 +1491,15 @@ function reloadPartidosSection() {
     const data = {
         campeonato_id: urlParams.get('campeonato_id'),
         categoria_id: urlParams.get('categoria_id'),
-        formato_id: urlParams.get('formato_id'),
         fecha_id: urlParams.get('fecha_id'),
         fecha_numero: urlParams.get('fecha_numero'),
         temporada: temporada,
         ajax_reload_partidos: 1
     };
+    const faseId = urlParams.get('fase_id');
+    if (faseId) {
+        data.fase_id = faseId;
+    }
     // Agregar zonas_ids si existen
     const zonas = urlParams.getAll('zonas_ids[]');
     if (zonas.length > 0) {
@@ -959,38 +1575,40 @@ $(document).ready(function() {
         $('#filterForm').submit();
     });
 
-    $('#btnAutoAssign').on('click', function() {
+    $(document).on('click', '#btnAutoAssign', function() {
         const formData = $('#autoAssignForm').serialize();
-        $.post('', formData + '&asignar_auto_ajax=1', function(res) {
-            if (res.success) {
-                // Recargar sección
-                reloadPartidosSection();
-                // Mostrar mensaje
-                var alert = $('<div class="alert alert-success alert-dismissible fade show position-fixed" style="top:20px;right:20px;z-index:9999;">'+
-                    '<i class="fas fa-check-circle"></i> ' + res.message +
-                    '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>'+
-                    '</div>');
-                $('body').append(alert);
-                setTimeout(function() { alert.fadeOut(); }, 4000);
+        submitAutoAssign(formData);
+    });
 
-                // Si hay no asignados, mostrar modal
-                if (res.unassigned_count > 0) {
-                    $.get('', { ajax_reload_partidos: 1 }, function(html) {
-                        // Extraer lista de no asignados del HTML (opcional)
-                        // Por simplicidad, mostramos mensaje genérico
-                        $('#unassignedList').html('<li>Hay ' + res.unassigned_count + ' partidos sin asignar.</li>');
-                        var myModal = new bootstrap.Modal(document.getElementById('modalUnassigned'));
-                        myModal.show();
-                    });
-                }
-            } else {
-                alert(res.error || 'Error al asignar automáticamente.');
-            }
-        }, 'json').fail(function() {
-            alert('Error de conexión al asignar automáticamente.');
-        });
+    $(document).on('click', '.btn-auto-assign-elim', function() {
+        const formData = $(this).closest('form').serialize();
+        submitAutoAssign(formData);
     });
 });
+
+function submitAutoAssign(formData) {
+    $.post('', formData + '&asignar_auto_ajax=1', function(res) {
+        if (res.success) {
+            reloadPartidosSection();
+            var alert = $('<div class="alert alert-success alert-dismissible fade show position-fixed" style="top:20px;right:20px;z-index:9999;">'+
+                '<i class="fas fa-check-circle"></i> ' + res.message +
+                '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>'+
+                '</div>');
+            $('body').append(alert);
+            setTimeout(function() { alert.fadeOut(); }, 4000);
+
+            if (res.unassigned_count > 0) {
+                $('#unassignedList').html('<li>Hay ' + res.unassigned_count + ' partidos sin asignar.</li>');
+                var myModal = new bootstrap.Modal(document.getElementById('modalUnassigned'));
+                myModal.show();
+            }
+        } else {
+            alert(res.error || 'Error al asignar automáticamente.');
+        }
+    }, 'json').fail(function() {
+        alert('Error de conexión al asignar automáticamente.');
+    });
+}
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
 </body>
