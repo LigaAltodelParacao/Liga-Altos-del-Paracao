@@ -65,17 +65,29 @@ if ($campeonato_id) {
 
 // Si es campeonato de zonas, cargar las zonas del formato asociado a la categoría
 $formato_id = null;
-if ($tipo_campeonato_seleccionado === 'zonas' && $campeonato_id && $categoria_id) {
-    // Obtener el formato asociado a la categoría seleccionada
+if ($tipo_campeonato_seleccionado === 'zonal' && $campeonato_id && $categoria_id) {
+    // Obtener el formato asociado directamente a la categoría seleccionada
     $stmt = $db->prepare("
         SELECT cf.id 
         FROM campeonatos_formato cf
-        JOIN categorias cat ON cf.campeonato_id = cat.campeonato_id
-        WHERE cat.id = ? AND cf.activo = 1
+        WHERE cf.categoria_id = ? AND cf.activo = 1
         LIMIT 1
     ");
     $stmt->execute([$categoria_id]);
     $formato_id = $stmt->fetchColumn();
+    
+    // Si no se encuentra formato directo, intentar buscar por campeonato_id
+    if (!$formato_id) {
+        $stmt = $db->prepare("
+            SELECT cf.id 
+            FROM campeonatos_formato cf
+            JOIN categorias cat ON cf.campeonato_id = cat.campeonato_id
+            WHERE cat.id = ? AND cf.activo = 1
+            LIMIT 1
+        ");
+        $stmt->execute([$categoria_id]);
+        $formato_id = $stmt->fetchColumn();
+    }
     
     if ($formato_id) {
         // Cargar las zonas del formato específico de la categoría
@@ -266,16 +278,29 @@ if (isset($_GET['ajax_reload_partidos']) && $_GET['ajax_reload_partidos'] == '1'
     }
     
     // Obtener formato_id desde categoria_id si es campeonato de zonas
-    if ($ajax_tipo_campeonato === 'zonas' && $ajax_categoria_id) {
+    if ($ajax_tipo_campeonato === 'zonal' && $ajax_categoria_id) {
+        // Intentar obtener formato directamente por categoria_id
         $stmt = $db->prepare("
             SELECT cf.id 
             FROM campeonatos_formato cf
-            JOIN categorias cat ON cf.campeonato_id = cat.campeonato_id
-            WHERE cat.id = ? AND cf.activo = 1
+            WHERE cf.categoria_id = ? AND cf.activo = 1
             LIMIT 1
         ");
         $stmt->execute([$ajax_categoria_id]);
         $ajax_formato_id = $stmt->fetchColumn();
+        
+        // Si no se encuentra formato directo, intentar buscar por campeonato_id
+        if (!$ajax_formato_id) {
+            $stmt = $db->prepare("
+                SELECT cf.id 
+                FROM campeonatos_formato cf
+                JOIN categorias cat ON cf.campeonato_id = cat.campeonato_id
+                WHERE cat.id = ? AND cf.activo = 1
+                LIMIT 1
+            ");
+            $stmt->execute([$ajax_categoria_id]);
+            $ajax_formato_id = $stmt->fetchColumn();
+        }
         
         // Cargar partidos si hay zonas seleccionadas y jornada
         if (!empty($ajax_zonas_ids) && $ajax_fecha_numero !== null) {
@@ -331,7 +356,7 @@ if (isset($_GET['ajax_reload_partidos']) && $_GET['ajax_reload_partidos'] == '1'
     $fechas = $ajax_fechas;
     
     $fecha_programada_sel = null;
-    if ($ajax_tipo_campeonato === 'zonas' && !empty($ajax_zonas_ids) && $ajax_fecha_numero !== null) {
+    if ($ajax_tipo_campeonato === 'zonal' && !empty($ajax_zonas_ids) && $ajax_fecha_numero !== null) {
         $fs = $db->prepare("SELECT fecha_partido FROM partidos WHERE zona_id = ? AND jornada_zona = ? AND tipo_torneo = 'zona' LIMIT 1");
         $fs->execute([$ajax_zonas_ids[0], $ajax_fecha_numero]);
         $fecha_programada_sel = $fs->fetchColumn();
@@ -344,7 +369,7 @@ if (isset($_GET['ajax_reload_partidos']) && $_GET['ajax_reload_partidos'] == '1'
     // Preparar datos de eliminatorias también en AJAX
     $fases_eliminatorias = [];
     $partidos_eliminatorias = [];
-    if ($ajax_tipo_campeonato === 'zonas' && $ajax_formato_id) {
+    if ($ajax_tipo_campeonato === 'zonal' && $ajax_formato_id) {
         $fsq = $db->prepare("SELECT * FROM fases_eliminatorias WHERE formato_id = ? ORDER BY orden");
         $fsq->execute([$ajax_formato_id]);
         $fases_eliminatorias = $fsq->fetchAll(PDO::FETCH_ASSOC);
@@ -408,7 +433,7 @@ if (isset($_GET['ajax_reload_partidos']) && $_GET['ajax_reload_partidos'] == '1'
                         <input type="hidden" name="tipo_campeonato" value="<?= $tipo_campeonato ?>">
                         <input type="hidden" name="temporada" value="<?= htmlspecialchars($temporada) ?>">
                         <?php 
-                        if ($tipo_campeonato === 'zonas' && !empty($zonas_ids) && $fecha_numero !== null) {
+                        if ($tipo_campeonato === 'zonal' && !empty($zonas_ids) && $fecha_numero !== null) {
                             foreach ($zonas_ids as $zid) {
                                 echo '<input type="hidden" name="zonas_ids[]" value="' . $zid . '">';
                             }
@@ -456,7 +481,7 @@ if (isset($_GET['ajax_reload_partidos']) && $_GET['ajax_reload_partidos'] == '1'
                         <thead>
                             <tr>
                                 <th>#</th>
-                                <?php if ($tipo_campeonato === 'zonas'): ?>
+                                <?php if ($tipo_campeonato === 'zonal'): ?>
                                 <th>Zona</th>
                                 <?php endif; ?>
                                 <th>Local</th>
@@ -471,7 +496,7 @@ if (isset($_GET['ajax_reload_partidos']) && $_GET['ajax_reload_partidos'] == '1'
                         <?php foreach ($partidos as $p): ?>
                             <tr id="row-<?= $p['id'] ?>">
                                 <td><?= $p['id'] ?></td>
-                                <?php if ($tipo_campeonato === 'zonas'): ?>
+                                <?php if ($tipo_campeonato === 'zonal'): ?>
                                 <td><span class="badge bg-primary"><?= htmlspecialchars($p['zona_nombre']) ?></span></td>
                                 <?php endif; ?>
                                 <td><?= htmlspecialchars($p['local']) ?></td>
@@ -821,7 +846,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['asignar_auto_ajax']))
     try {
         $db->beginTransaction();
 
-        if ($post_tipo === 'zonas') {
+        if ($post_tipo === 'zonal') {
             $post_zonas_ids = $_POST['zonas_ids'] ?? [];
             $post_fecha_numero = $_POST['fecha_numero'] ?? null;
             if (empty($post_zonas_ids) || !$post_fecha_numero) {
@@ -1026,7 +1051,7 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
                                 </select>
                             </div>
                         <?php endif; ?>
-                        <?php if ($campeonato_id && $tipo_campeonato_seleccionado === 'zonas' && !$es_nocturno_seleccionado && $categoria_id): // BLOQUE ZONAS ?>
+                        <?php if ($campeonato_id && $tipo_campeonato_seleccionado === 'zonal' && !$es_nocturno_seleccionado && $categoria_id): // BLOQUE ZONAS ?>
                             <?php if (!empty($zonas)): // Mostrar las zonas del formato de la categoría ?>
                             <div class="col-md-12 mt-3">
                                 <label class="form-label fw-bold">
@@ -1119,7 +1144,7 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
             <?php
             // Calcular fecha programada para zonas
             $fecha_programada_sel = null;
-            if ($tipo_campeonato_seleccionado === 'zonas' && !empty($zonas_ids) && $fecha_numero !== null) {
+            if ($tipo_campeonato_seleccionado === 'zonal' && !empty($zonas_ids) && $fecha_numero !== null) {
                 // Intentar obtener fecha de los partidos existentes
                 $fs = $db->prepare("SELECT fecha_partido FROM partidos WHERE zona_id = ? AND jornada_zona = ? AND tipo_torneo = 'zona' AND fecha_partido IS NOT NULL LIMIT 1");
                 $fs->execute([$zonas_ids[0], $fecha_numero]);
@@ -1137,7 +1162,7 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
             // Crear variable local para compatibilidad con el código existente
             $tipo_campeonato = $tipo_campeonato_seleccionado;
             ?>
-            <?php if ($tipo_campeonato_seleccionado === 'zonas' && !empty($zonas_ids) && $fecha_numero !== null && $temporada): ?>
+            <?php if ($tipo_campeonato_seleccionado === 'zonal' && !empty($zonas_ids) && $fecha_numero !== null && $temporada): ?>
                 <!-- ASIGNACIÓN AUTOMÁTICA -->
                 <div class="card mb-4">
                     <div class="card-header bg-success text-white">
@@ -1196,7 +1221,7 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
                             <thead>
                                 <tr>
                                     <th>#</th>
-                                    <?php if ($tipo_campeonato === 'zonas'): ?>
+                                    <?php if ($tipo_campeonato === 'zonal'): ?>
                                     <th>Zona</th>
                                     <?php endif; ?>
                                     <th>Local</th>
@@ -1211,7 +1236,7 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
                             <?php foreach ($partidos as $p): ?>
                                 <tr id="row-<?= $p['id'] ?>">
                                     <td><?= $p['id'] ?></td>
-                                    <?php if ($tipo_campeonato === 'zonas'): ?>
+                                    <?php if ($tipo_campeonato === 'zonal'): ?>
                                     <td><span class="badge bg-primary"><?= htmlspecialchars($p['zona_nombre']) ?></span></td>
                                     <?php endif; ?>
                                     <td><?= htmlspecialchars($p['local']) ?></td>
@@ -1291,15 +1316,15 @@ function canchaTieneHorarioLibre(PDO $db, $cancha_id, $fecha_programada, $tempor
                     </div>
                 </div>
                 <?php endif; ?>
-            <?php elseif ($tipo_campeonato_seleccionado === 'zonas' && !empty($zonas_ids) && $fecha_numero !== null && !$temporada): ?>
+            <?php elseif ($tipo_campeonato_seleccionado === 'zonal' && !empty($zonas_ids) && $fecha_numero !== null && !$temporada): ?>
                 <div class="alert alert-warning">
                     <i class="fas fa-exclamation-triangle"></i> Selecciona una temporada para poder asignar canchas y horarios.
                 </div>
-            <?php elseif ($tipo_campeonato_seleccionado === 'zonas' && (empty($zonas_ids) || $fecha_numero === null)): ?>
+            <?php elseif ($tipo_campeonato_seleccionado === 'zonal' && (empty($zonas_ids) || $fecha_numero === null)): ?>
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle"></i> Selecciona zonas y fecha para ver los partidos y asignar canchas/horarios.
                 </div>
-            <?php elseif (empty($fases_para_mostrar) && $tipo_campeonato_seleccionado !== 'zonas'): ?>
+            <?php elseif (empty($fases_para_mostrar) && $tipo_campeonato_seleccionado !== 'zonal'): ?>
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle"></i> No hay partidos para mostrar.
                 </div>
