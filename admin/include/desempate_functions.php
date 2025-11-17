@@ -118,17 +118,20 @@ function aplicarCriteriosDesempate($equipos, $zona_id, $db) {
  * Desempata un grupo de equipos con los mismos puntos
  */
 function desempatarGrupo($grupo, $zona_id, $db) {
-    // Criterio 1 y 2: Diferencia de goles y goles a favor
+    // Los equipos ya están agrupados por puntos (criterio 1)
+    // Aplicar criterios de desempate en orden:
+    // 2. Diferencia de goles (DG)
+    // 3. Goles a favor (GF)
     usort($grupo, function($a, $b) {
-        // Primero por diferencia de goles
+        // Criterio 2: Diferencia de goles
         $diff_cmp = $b['diferencia_gol'] - $a['diferencia_gol'];
         if ($diff_cmp != 0) return $diff_cmp;
         
-        // Luego por goles a favor
+        // Criterio 3: Goles a favor
         return $b['goles_favor'] - $a['goles_favor'];
     });
     
-    // Si todavía hay empate, aplicar criterios 3, 4 y 5 (enfrentamientos directos)
+    // Si todavía hay empate, aplicar criterios 4, 5 y 6 (enfrentamientos directos, victorias, fair play)
     $grupos_empatados = agruparEquiposEmpatados($grupo);
     $resultado = [];
     
@@ -136,7 +139,7 @@ function desempatarGrupo($grupo, $zona_id, $db) {
         if (count($subgrupo) == 1) {
             $resultado[] = $subgrupo[0];
         } else {
-            // Aplicar enfrentamientos directos (criterios 3, 4, 5)
+            // Aplicar enfrentamientos directos y otros criterios (4, 5, 6)
             $subgrupo_desempatado = desempatarPorEnfrentamientosDirectos($subgrupo, $zona_id, $db);
             foreach ($subgrupo_desempatado as $equipo) {
                 $resultado[] = $equipo;
@@ -175,20 +178,22 @@ function agruparEquiposEmpatados($grupo) {
 function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
     $equipos_ids = array_map(function($e) { return $e['id']; }, $grupo);
     
-    // Obtener todos los partidos entre estos equipos
+    // Obtener todos los partidos entre estos equipos (usar tabla partidos con tipo_torneo = 'zona')
     $placeholders = implode(',', array_fill(0, count($equipos_ids), '?'));
     $stmt = $db->prepare("
         SELECT 
-            pz.id,
-            pz.equipo_local_id,
-            pz.equipo_visitante_id,
-            pz.goles_local,
-            pz.goles_visitante
-        FROM partidos_zona pz
-        WHERE pz.zona_id = ?
-        AND pz.equipo_local_id IN ($placeholders)
-        AND pz.equipo_visitante_id IN ($placeholders)
-        AND pz.estado = 'finalizado'
+            p.id,
+            p.equipo_local_id,
+            p.equipo_visitante_id,
+            p.goles_local,
+            p.goles_visitante
+        FROM partidos p
+        WHERE p.zona_id = ?
+        AND p.tipo_torneo = 'zona'
+        AND (
+            (p.equipo_local_id IN ($placeholders) AND p.equipo_visitante_id IN ($placeholders))
+        )
+        AND p.estado = 'finalizado'
     ");
     
     $params = array_merge([$zona_id], $equipos_ids, $equipos_ids);
@@ -245,33 +250,37 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
     }
     unset($equipo); // Romper la referencia
     
-    // Ordenar por criterios según especificaciones:
-    // (c) Resultados entre sí: Puntos, Diferencia, Goles a favor, Goles de visitante
-    // (d) Más victorias
-    // (e) Fair Play
-    // (f) Sorteo (si todos empatan)
+    // Ordenar por criterios según especificaciones FIFA:
+    // 1. Puntos (ya aplicado antes)
+    // 2. Diferencia de goles (ya aplicado antes)
+    // 3. Goles a favor (ya aplicado antes)
+    // 4. Resultado entre ellos (duelos directos): Puntos, Diferencia, Goles a favor, Goles de visitante
+    // 5. Más victorias (partidos ganados)
+    // 6. Fair Play (menos puntos es mejor)
+    // 7. Sorteo (si todos empatan)
     usort($grupo, function($a, $b) {
-        // Criterio (c.1): Puntos en enfrentamientos directos
+        // Criterio 4.1: Puntos en enfrentamientos directos
         $puntos_cmp = $b['stats_directos']['puntos'] - $a['stats_directos']['puntos'];
         if ($puntos_cmp != 0) return $puntos_cmp;
         
-        // Criterio (c.2): Diferencia de goles en enfrentamientos directos
+        // Criterio 4.2: Diferencia de goles en enfrentamientos directos
         $dif_cmp = $b['stats_directos']['dif'] - $a['stats_directos']['dif'];
         if ($dif_cmp != 0) return $dif_cmp;
         
-        // Criterio (c.3): Goles a favor en enfrentamientos directos
+        // Criterio 4.3: Goles a favor en enfrentamientos directos
         $gf_cmp = $b['stats_directos']['gf'] - $a['stats_directos']['gf'];
         if ($gf_cmp != 0) return $gf_cmp;
         
-        // Criterio (c.4): Goles de visitante en enfrentamientos directos
+        // Criterio 4.4: Goles de visitante en enfrentamientos directos
         $gv_cmp = $b['stats_directos']['goles_visitante'] - $a['stats_directos']['goles_visitante'];
         if ($gv_cmp != 0) return $gv_cmp;
         
-        // Criterio (d): Más victorias (partidos ganados)
+        // Criterio 5: Más victorias (partidos ganados) - TOTALES, no solo entre ellos
         $victorias_cmp = $b['partidos_ganados'] - $a['partidos_ganados'];
         if ($victorias_cmp != 0) return $victorias_cmp;
         
-        // Criterio (e): Fairplay (menos puntos es mejor)
+        // Criterio 6: Fairplay (menos puntos es mejor)
+        // Amarilla = -1, Segunda amarilla (doble amarilla) = -3, Roja directa = -5
         $fairplay_cmp = $a['puntos_fairplay'] - $b['puntos_fairplay'];
         if ($fairplay_cmp != 0) return $fairplay_cmp;
         
@@ -344,9 +353,13 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
  * Actualiza las posiciones en la base de datos y marca clasificados
  */
 function actualizarPosiciones($equipos_ordenados, $zona_id, $db) {
-    // Obtener cuántos clasifican de esta zona
+    // Obtener configuración de clasificación del formato
     $stmt_formato = $db->prepare("
-        SELECT cf.equipos_clasifican, cf.cantidad_zonas, cf.tipo_clasificacion
+        SELECT 
+            cf.primeros_clasifican,
+            cf.segundos_clasifican,
+            cf.terceros_clasifican,
+            cf.cuartos_clasifican
         FROM campeonatos_formato cf
         INNER JOIN zonas z ON cf.id = z.formato_id
         WHERE z.id = ?
@@ -354,20 +367,20 @@ function actualizarPosiciones($equipos_ordenados, $zona_id, $db) {
     $stmt_formato->execute([$zona_id]);
     $formato = $stmt_formato->fetch(PDO::FETCH_ASSOC);
     
-    // Determinar cuántos clasifican por zona
-    $clasifican_por_zona = 2; // Por defecto 2 primeros
+    // Determinar qué posiciones clasifican
+    // Los primeros siempre clasifican, luego según configuración del administrador
+    $posiciones_clasifican = [1]; // El primero siempre clasifica
+    
     if ($formato) {
-        switch ($formato['tipo_clasificacion']) {
-            case '1_primero':
-                $clasifican_por_zona = 1;
-                break;
-            case '2_primeros':
-            case '2_primeros_2_mejores_terceros':
-                $clasifican_por_zona = 2;
-                break;
-            case '4_primeros':
-                $clasifican_por_zona = 4;
-                break;
+        // Agregar posiciones según configuración
+        if ($formato['segundos_clasifican'] > 0) {
+            $posiciones_clasifican[] = 2;
+        }
+        if ($formato['terceros_clasifican'] > 0) {
+            $posiciones_clasifican[] = 3;
+        }
+        if ($formato['cuartos_clasifican'] > 0) {
+            $posiciones_clasifican[] = 4;
         }
     }
     
@@ -398,7 +411,8 @@ function actualizarPosiciones($equipos_ordenados, $zona_id, $db) {
     foreach ($equipos_ordenados as $equipo) {
         // Si el equipo tiene una posición resuelta por sorteo, usar esa
         $posicion_final = $posiciones_resueltas[$equipo['id']] ?? $posicion;
-        $clasificado = ($posicion_final <= $clasifican_por_zona) ? 1 : 0;
+        // Marcar como clasificado si su posición está en la lista de posiciones que clasifican
+        $clasificado = in_array($posicion_final, $posiciones_clasifican) ? 1 : 0;
         
         $stmt->execute([$posicion_final, $clasificado, $zona_id, $equipo['id']]);
         

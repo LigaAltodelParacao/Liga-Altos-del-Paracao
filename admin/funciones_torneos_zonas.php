@@ -581,8 +581,9 @@ function obtenerEquiposClasificados($formato_id, $db) {
         calcularTablaPosicionesConDesempate($zona['id'], $db);
     }
     
-    // Obtener equipos clasificados desde equipos_zonas (ya ordenados por desempate)
+    // Obtener equipos clasificados según configuración (primeros siempre, luego según config)
     foreach ($zonas as $zona) {
+        // Obtener todos los equipos ordenados por posición
         $stmt = $db->prepare("
             SELECT 
                 e.id as equipo_id,
@@ -595,22 +596,39 @@ function obtenerEquiposClasificados($formato_id, $db) {
             FROM equipos_zonas ez
             INNER JOIN equipos e ON ez.equipo_id = e.id
             INNER JOIN zonas z ON ez.zona_id = z.id
-            WHERE ez.zona_id = ? AND ez.clasificado = 1
+            WHERE ez.zona_id = ?
             ORDER BY ez.posicion ASC
         ");
         $stmt->execute([$zona['id']]);
-        $equipos_clasificados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $equipos_zona = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        foreach ($equipos_clasificados as $equipo) {
-            $clasificados[] = [
-                'equipo_id' => $equipo['equipo_id'],
-                'equipo' => $equipo['equipo'],
-                'logo' => $equipo['logo'],
-                'zona' => $equipo['zona'],
-                'posicion' => $equipo['posicion'],
-                'puntos' => $equipo['puntos'],
-                'diferencia' => $equipo['diferencia']
-            ];
+        // Filtrar según configuración de clasificación
+        foreach ($equipos_zona as $equipo) {
+            $posicion = (int)$equipo['posicion'];
+            $clasifica = false;
+            
+            // El primero siempre clasifica
+            if ($posicion == 1) {
+                $clasifica = true;
+            } elseif ($posicion == 2 && $config['segundos_clasifican'] > 0) {
+                $clasifica = true;
+            } elseif ($posicion == 3 && $config['terceros_clasifican'] > 0) {
+                $clasifica = true;
+            } elseif ($posicion == 4 && $config['cuartos_clasifican'] > 0) {
+                $clasifica = true;
+            }
+            
+            if ($clasifica) {
+                $clasificados[] = [
+                    'equipo_id' => $equipo['equipo_id'],
+                    'equipo' => $equipo['equipo'],
+                    'logo' => $equipo['logo'],
+                    'zona' => $equipo['zona'],
+                    'posicion' => $equipo['posicion'],
+                    'puntos' => $equipo['puntos'],
+                    'diferencia' => $equipo['diferencia']
+                ];
+            }
         }
     }
     
@@ -643,12 +661,12 @@ function generarFixtureEliminatorias($formato_id, $db) {
         }
         
         // Verificar si hay empates pendientes de resolución
-        if (hayEmpatesPendientes($formato_id, $db)) {
+        // Si hay empates pendientes, se pueden generar las eliminatorias con los equipos ya clasificados
+        // Los empates pendientes se resuelven manualmente y esos equipos se cargan después
+        $hay_empates_pendientes = hayEmpatesPendientes($formato_id, $db);
+        if ($hay_empates_pendientes) {
             $empates = obtenerEmpatesPendientes($formato_id, $db);
-            $mensaje = "Hay " . count($empates) . " empate(s) pendiente(s) de resolución por sorteo. ";
-            $mensaje .= "Debes resolver todos los empates antes de generar las fases eliminatorias. ";
-            $mensaje .= "Ve a la sección de resolución de empates.";
-            throw new Exception($mensaje);
+            error_log("Advertencia: Hay " . count($empates) . " empate(s) pendiente(s) de resolución. Se generarán eliminatorias con equipos ya clasificados.");
         }
         
         // Obtener configuración
@@ -676,8 +694,39 @@ function generarFixtureEliminatorias($formato_id, $db) {
         $stmt->execute([$formato_id]);
         $fases = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
+        // Si no hay fases eliminatorias, crearlas automáticamente según cantidad de clasificados
         if (empty($fases)) {
-            throw new Exception("No hay fases eliminatorias configuradas");
+            $total_clasificados = count($clasificados);
+            $orden = 1;
+            
+            // Determinar qué fases crear según cantidad de clasificados
+            if ($total_clasificados >= 16) {
+                $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden, activa, generada) VALUES (?, 'octavos', ?, 1, 0)");
+                $stmt->execute([$formato_id, $orden++]);
+            }
+            if ($total_clasificados >= 8) {
+                $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden, activa, generada) VALUES (?, 'cuartos', ?, 1, 0)");
+                $stmt->execute([$formato_id, $orden++]);
+            }
+            if ($total_clasificados >= 4) {
+                $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden, activa, generada) VALUES (?, 'semifinal', ?, 1, 0)");
+                $stmt->execute([$formato_id, $orden++]);
+            }
+            if ($total_clasificados >= 2) {
+                $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden, activa, generada) VALUES (?, 'tercer_puesto', ?, 1, 0)");
+                $stmt->execute([$formato_id, $orden++]);
+                $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden, activa, generada) VALUES (?, 'final', ?, 1, 0)");
+                $stmt->execute([$formato_id, $orden++]);
+            }
+            
+            // Obtener las fases recién creadas
+            $stmt = $db->prepare("SELECT * FROM fases_eliminatorias WHERE formato_id = ? ORDER BY orden");
+            $stmt->execute([$formato_id]);
+            $fases = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+        
+        if (empty($fases)) {
+            throw new Exception("No se pudieron crear las fases eliminatorias. Se necesitan al menos 2 equipos clasificados.");
         }
         
         // Obtener categoría para crear fechas
