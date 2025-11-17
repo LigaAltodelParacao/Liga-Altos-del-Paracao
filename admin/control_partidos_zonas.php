@@ -82,30 +82,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($partido['zona_id']) {
                 actualizarEstadisticasZona($partido['zona_id'], $partido['equipo_local_id'], $db);
                 actualizarEstadisticasZona($partido['zona_id'], $partido['equipo_visitante_id'], $db);
+                
+                // Recalcular tabla de posiciones con desempate
+                require_once __DIR__ . '/include/desempate_functions.php';
+                calcularTablaPosicionesConDesempate($partido['zona_id'], $db);
             }
             
-            // Procesar eventos y sanciones automáticas (si existen las funciones)
-            $sanciones_file = __DIR__ . '/../include/sanciones_functions.php';
-            if (file_exists($sanciones_file)) {
-                require_once $sanciones_file;
-                if (function_exists('procesarEventosYCrearSanciones')) {
-                    procesarEventosYCrearSanciones($partido_id, $db);
-                }
-                if (function_exists('cumplirSancionesAutomaticas')) {
-                    cumplirSancionesAutomaticas($partido_id, $db);
-                }
+            // Procesar eventos y sanciones automáticas (usando el sistema existente)
+            require_once __DIR__ . '/include/sanciones_functions.php';
+            if (function_exists('procesarEventosYCrearSanciones')) {
+                procesarEventosYCrearSanciones($partido_id, $db);
+            }
+            if (function_exists('cumplirSancionesAutomaticas')) {
+                cumplirSancionesAutomaticas($partido_id, $db);
             }
             
             $db->commit();
             
             // Verificar si todos los partidos están finalizados para generar eliminatorias
             if (todosPartidosGruposFinalizados($formato_id, $db)) {
-                // Intentar generar eliminatorias automáticamente
-                try {
-                    generarFixtureEliminatorias($formato_id, $db);
-                    $_SESSION['message'] = 'Resultado guardado. ¡Fase de grupos completada! Se generaron automáticamente los partidos eliminatorios.';
-                } catch (Exception $e) {
-                    $_SESSION['message'] = 'Resultado guardado. ' . $e->getMessage();
+                // Recalcular todas las tablas para detectar empates pendientes
+                require_once __DIR__ . '/include/desempate_functions.php';
+                $stmt = $db->prepare("SELECT id FROM zonas WHERE formato_id = ?");
+                $stmt->execute([$formato_id]);
+                $zonas_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                
+                foreach ($zonas_ids as $zona_id) {
+                    calcularTablaPosicionesConDesempate($zona_id, $db);
+                }
+                
+                // Verificar si hay empates pendientes
+                if (hayEmpatesPendientes($formato_id, $db)) {
+                    $empates = obtenerEmpatesPendientes($formato_id, $db);
+                    $_SESSION['message'] = 'Resultado guardado. ¡Fase de grupos completada! Sin embargo, hay ' . count($empates) . ' empate(s) pendiente(s) de resolución por sorteo. ';
+                    $_SESSION['message'] .= '<a href="resolver_empates.php?formato_id=' . $formato_id . '" class="alert-link">Ir a Resolver Empates</a>';
+                } else {
+                    // Intentar generar eliminatorias automáticamente
+                    try {
+                        generarFixtureEliminatorias($formato_id, $db);
+                        $_SESSION['message'] = 'Resultado guardado. ¡Fase de grupos completada! Se generaron automáticamente los partidos eliminatorios.';
+                    } catch (Exception $e) {
+                        $_SESSION['message'] = 'Resultado guardado. ' . $e->getMessage();
+                    }
                 }
             } else {
                 $_SESSION['message'] = 'Resultado guardado correctamente';
@@ -193,7 +211,7 @@ $puede_generar_eliminatorias = todosPartidosGruposFinalizados($formato_id, $db);
     </style>
 </head>
 <body>
-    <?php include __DIR__ . '/../include/sidebar.php'; ?>
+    <?php include __DIR__ . '/include/sidebar.php'; ?>
     
     <div class="container-fluid p-4">
         <div class="row mb-4">
@@ -441,9 +459,37 @@ $puede_generar_eliminatorias = todosPartidosGruposFinalizados($formato_id, $db);
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
     <script>
-        function cargarPartido(partidoId, golesLocal = '', golesVisitante = '') {
+        function cargarResultado(partidoId) {
             // Obtener información del partido via AJAX
-            fetch(`../ajax/get_partido_zona.php?partido_id=${partidoId}`)
+            fetch(`ajax/get_partido_zona.php?partido_id=${partidoId}`)
+                .then(r => {
+                    if (!r.ok) {
+                        throw new Error('Error al cargar partido');
+                    }
+                    return r.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                        return;
+                    }
+                    document.getElementById('partido_id').value = partidoId;
+                    document.getElementById('equipo_local_nombre').value = data.equipo_local || 'Equipo Local';
+                    document.getElementById('equipo_visitante_nombre').value = data.equipo_visitante || 'Equipo Visitante';
+                    document.getElementById('goles_local').value = '';
+                    document.getElementById('goles_visitante').value = '';
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('modalResultado'));
+                    modal.show();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al cargar el partido: ' + error.message);
+                });
+        }
+        
+        function editarResultado(partidoId, golesLocal, golesVisitante) {
+            fetch(`ajax/get_partido_zona.php?partido_id=${partidoId}`)
                 .then(r => {
                     if (!r.ok) {
                         throw new Error('Error al cargar partido');
@@ -468,14 +514,6 @@ $puede_generar_eliminatorias = todosPartidosGruposFinalizados($formato_id, $db);
                     console.error('Error:', error);
                     alert('Error al cargar el partido: ' + error.message);
                 });
-        }
-        
-        function cargarResultado(partidoId) {
-            cargarPartido(partidoId);
-        }
-        
-        function editarResultado(partidoId, golesLocal, golesVisitante) {
-            cargarPartido(partidoId, golesLocal, golesVisitante);
         }
     </script>
 </body>

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../admin/funciones_torneos_zonas.php';
 
 if (!isLoggedIn() || !hasPermission('planillero')) {
     http_response_code(403);
@@ -48,6 +49,8 @@ try {
     if (!empty($data['finalizar'])) {
         $db->prepare("UPDATE partidos SET estado = 'finalizado', tiempo_actual = 'finalizado' WHERE id = ?")
            ->execute([$partido_id]);
+
+        procesarPostFinalizacionPartido($partido_id, $db);
     }
 
     $db->commit();

@@ -41,7 +41,9 @@ if ($campeonato_id) {
 ";
 
 if ($campeonato_id) {
-    $where_conditions[] = "c.campeonato_id = ?";
+    // Filtrar por campeonato_id si está disponible en sanciones, sino por categoría
+    $where_conditions[] = "(s.campeonato_id = ? OR (s.campeonato_id IS NULL AND c.campeonato_id = ?))";
+    $params[] = $campeonato_id;
     $params[] = $campeonato_id;
 }
 
@@ -476,7 +478,31 @@ if (!empty($where_conditions)) {
                     </div>
                 <?php endif; ?>
             </div>
-        </div>        
+        </div>
+
+        <!-- Información adicional -->
+        <div class="card mt-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-info-circle"></i> Información del Sistema de Sanciones</h5>
+            </div>
+            <div class="card-body">
+                <h6><strong>Tipos de Sanciones:</strong></h6>
+                <ul class="mb-3">
+                    <li><strong>4 Amarillas Acumuladas:</strong> 1 fecha de suspensión automática</li>
+                    <li><strong>Doble Amarilla:</strong> 1-2 fechas según reglamento</li>
+                    <li><strong>Roja Directa:</strong> 2+ fechas según gravedad de la falta</li>
+                    <li><strong>Administrativa:</strong> Cantidad determinada por autoridades del torneo</li>
+                </ul>
+                
+                <h6><strong>Sistema Automático:</strong></h6>
+                <ul class="mb-3">
+                    <li>Las sanciones se cumplen automáticamente cuando el equipo del jugador juega un partido oficial</li>
+                    <li>El sistema actualiza el contador de fechas cumplidas al cargar resultados</li>
+                    <li>Una vez cumplidas todas las fechas, la sanción se marca como completada automáticamente</li>
+                    <li>Los jugadores sancionados no pueden ser incluidos en planillas de juego</li>
+                </ul>
+            </div>
+        </div>
     </main>
 
     <!-- Footer -->

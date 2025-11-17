@@ -17,9 +17,17 @@ $categorias = $stmt->fetchAll();
 $categoria_id = $_GET['categoria'] ?? ($categorias[0]['id'] ?? null);
 $campeonato_id = null;
 
-// Obtener tabla de goleadores - LIMITADO A TOP 10
-$goleadores = [];
+// Obtener campeonato_id de la categoría
 if ($categoria_id) {
+    $stmt = $db->prepare("SELECT campeonato_id FROM categorias WHERE id = ?");
+    $stmt->execute([$categoria_id]);
+    $campeonato_id = $stmt->fetchColumn();
+}
+
+// Obtener tabla de goleadores - LIMITADO A TOP 10
+// Incluye partidos normales, de zonas y eliminatorias del mismo campeonato
+$goleadores = [];
+if ($categoria_id && $campeonato_id) {
     $stmt = $db->prepare("
         SELECT 
             j.id as jugador_id,
@@ -50,13 +58,33 @@ if ($categoria_id) {
         LEFT JOIN equipos el_oponente ON p.equipo_local_id = el_oponente.id AND p.equipo_visitante_id = e.id
         LEFT JOIN equipos ev_oponente ON p.equipo_visitante_id = ev_oponente.id AND p.equipo_local_id = e.id
         WHERE e.categoria_id = ? AND j.activo = 1
-          AND (f.categoria_id = ? OR f.categoria_id IS NULL)
+          AND (
+              -- Partidos normales (a través de fechas -> categorias)
+              (p.tipo_torneo = 'normal' AND f.categoria_id = ?)
+              OR
+              -- Partidos de zonas (a través de zonas -> formato -> campeonato)
+              (p.tipo_torneo = 'zona' AND p.zona_id IN (
+                  SELECT z.id FROM zonas z
+                  JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                  WHERE cf.campeonato_id = ?
+              ))
+              OR
+              -- Partidos eliminatorios (a través de fases -> formato -> campeonato)
+              (p.tipo_torneo = 'eliminatoria' AND p.fase_eliminatoria_id IN (
+                  SELECT fe.id FROM fases_eliminatorias fe
+                  JOIN campeonatos_formato cf ON fe.formato_id = cf.id
+                  WHERE cf.campeonato_id = ?
+              ))
+              OR
+              -- Usar campeonato_id del evento si está disponible
+              (ev.campeonato_id = ?)
+          )
         GROUP BY j.id, j.apellido_nombre, j.dni, j.fecha_nacimiento, j.foto, e.nombre, e.logo, e.color_camiseta
         HAVING goles > 0
         ORDER BY goles DESC, j.apellido_nombre ASC
         LIMIT 10
     ");
-    $stmt->execute([$categoria_id, $categoria_id]);
+    $stmt->execute([$categoria_id, $categoria_id, $campeonato_id, $campeonato_id, $campeonato_id]);
     $goleadores = $stmt->fetchAll();
 }
 
@@ -72,7 +100,7 @@ foreach ($categorias as $cat) {
 
 // Estadísticas generales
 $stats = [];
-if ($categoria_id) {
+if ($categoria_id && $campeonato_id) {
     $stmt = $db->prepare("
         SELECT 
             COUNT(DISTINCT j.id) as total_jugadores,
@@ -86,9 +114,25 @@ if ($categoria_id) {
         LEFT JOIN partidos p ON ev.partido_id = p.id
         LEFT JOIN fechas f ON p.fecha_id = f.id
         WHERE e.categoria_id = ? AND j.activo = 1
-          AND (f.categoria_id = ? OR f.categoria_id IS NULL)
+          AND (
+              (p.tipo_torneo = 'normal' AND f.categoria_id = ?)
+              OR
+              (p.tipo_torneo = 'zona' AND p.zona_id IN (
+                  SELECT z.id FROM zonas z
+                  JOIN campeonatos_formato cf ON z.formato_id = cf.id
+                  WHERE cf.campeonato_id = ?
+              ))
+              OR
+              (p.tipo_torneo = 'eliminatoria' AND p.fase_eliminatoria_id IN (
+                  SELECT fe.id FROM fases_eliminatorias fe
+                  JOIN campeonatos_formato cf ON fe.formato_id = cf.id
+                  WHERE cf.campeonato_id = ?
+              ))
+              OR
+              (ev.campeonato_id = ?)
+          )
     ");
-    $stmt->execute([$categoria_id, $categoria_id]);
+    $stmt->execute([$categoria_id, $categoria_id, $campeonato_id, $campeonato_id, $campeonato_id]);
     $stats = $stmt->fetch();
 }
 // Arcos menos vencidos - Top 10

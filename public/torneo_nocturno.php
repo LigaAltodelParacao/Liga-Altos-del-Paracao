@@ -8,9 +8,23 @@ require_once __DIR__ . '/../config.php';
 $db = Database::getInstance()->getConnection();
 
 // Buscar campeonato activo llamado "Torneo Nocturno"
-$stmt = $db->prepare("SELECT id, nombre FROM campeonatos WHERE activo = 1 AND nombre LIKE ? LIMIT 1");
-$stmt->execute(['%Torneo Nocturno%']);
-$campeonato = $stmt->fetch(PDO::FETCH_ASSOC);
+$campeonatoIdSeleccionado = isset($_GET['campeonato_id']) ? (int)$_GET['campeonato_id'] : null;
+if ($campeonatoIdSeleccionado) {
+    $stmt = $db->prepare("SELECT id, nombre FROM campeonatos WHERE id = ? AND activo = 1 LIMIT 1");
+    $stmt->execute([$campeonatoIdSeleccionado]);
+    $campeonato = $stmt->fetch(PDO::FETCH_ASSOC);
+} else {
+    $stmt = $db->prepare("
+        SELECT id, nombre 
+        FROM campeonatos 
+        WHERE activo = 1 AND nombre LIKE ? 
+        ORDER BY fecha_inicio DESC, id DESC
+        LIMIT 1
+    ");
+    $stmt->execute(['%Torneo Nocturno%']);
+    $campeonato = $stmt->fetch(PDO::FETCH_ASSOC);
+    $campeonatoIdSeleccionado = $campeonato ? (int)$campeonato['id'] : null;
+}
 if (!$campeonato) {
     header('Location: ../index.php');
     exit;
@@ -20,12 +34,60 @@ if (!$campeonato) {
 $stmt = $db->prepare("SELECT id, nombre FROM categorias WHERE campeonato_id = ? AND activa = 1 ORDER BY nombre");
 $stmt->execute([$campeonato['id']]);
 $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
-$categoria_ids = array_column($categorias, 'id');
+
+$categoriaSeleccionadaId = null;
+$categoriaSeleccionada = null;
+if (!empty($categorias)) {
+    $categoriaSeleccionadaId = isset($_GET['categoria_id']) ? (int)$_GET['categoria_id'] : null;
+    $idsDisponibles = array_column($categorias, 'id');
+    if (!$categoriaSeleccionadaId || !in_array($categoriaSeleccionadaId, $idsDisponibles, true)) {
+        $categoriaSeleccionadaId = $categorias[0]['id'];
+    }
+    foreach ($categorias as $cat) {
+        if ((int)$cat['id'] === (int)$categoriaSeleccionadaId) {
+            $categoriaSeleccionada = $cat;
+            break;
+        }
+    }
+}
+
+$categoria_ids = $categoriaSeleccionadaId ? [$categoriaSeleccionadaId] : array_column($categorias, 'id');
 
 // Formatos de zonas
-$stmt = $db->prepare("SELECT * FROM campeonatos_formato WHERE campeonato_id = ? AND activo = 1 ORDER BY created_at DESC");
-$stmt->execute([$campeonato['id']]);
+$sqlFormatos = "
+    SELECT * 
+    FROM campeonatos_formato 
+    WHERE campeonato_id = ? 
+      AND activo = 1
+";
+$paramsFormatos = [$campeonato['id']];
+if ($categoriaSeleccionadaId) {
+    $sqlFormatos .= " AND (categoria_id = ? OR categoria_id IS NULL)";
+    $paramsFormatos[] = $categoriaSeleccionadaId;
+}
+$sqlFormatos .= " ORDER BY created_at DESC";
+$stmt = $db->prepare($sqlFormatos);
+$stmt->execute($paramsFormatos);
 $formatos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+if ($categoriaSeleccionadaId) {
+    $formatos = array_values(array_filter($formatos, function ($formato) use ($categoriaSeleccionadaId) {
+        return !isset($formato['categoria_id']) || (int)$formato['categoria_id'] === (int)$categoriaSeleccionadaId;
+    }));
+    if (empty($formatos)) {
+        $stmt = $db->prepare("
+            SELECT DISTINCT cf.*
+            FROM campeonatos_formato cf
+            JOIN zonas z ON z.formato_id = cf.id
+            JOIN equipos_zonas ez ON ez.zona_id = z.id
+            JOIN equipos e ON e.id = ez.equipo_id
+            WHERE cf.campeonato_id = ?
+              AND cf.activo = 1
+              AND e.categoria_id = ?
+        ");
+        $stmt->execute([$campeonato['id'], $categoriaSeleccionadaId]);
+        $formatos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+}
 
 // ================ CARGAR FUNCIONES DE TORNEOS CON ZONAS ================
 $ruta_funciones_zonas = __DIR__ . '/../admin/funciones_torneos_zonas.php';
@@ -38,12 +100,21 @@ if (file_exists($ruta_funciones_zonas)) {
 
 // ================ POSICIONES POR ZONAS ================
 $zonas_data = [];
+$formato_fixture_zonas = [];
+$formato_fases = [];
+$formato_partidos_eliminatorios = [];
+$zona_ids = [];
+$fase_ids = [];
+
 if (!empty($formatos)) {
     foreach ($formatos as $formato) {
         try {
             $stmtZ = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
             $stmtZ->execute([$formato['id']]);
             $zonas = $stmtZ->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($zonas as $zona) {
+                $zona_ids[] = (int)$zona['id'];
+            }
             
             // Actualizar estadísticas de todas las zonas antes de mostrar
             // La función obtenerTablaPosicionesZona ya se encarga de actualizar automáticamente
@@ -92,11 +163,78 @@ if (!empty($formatos)) {
                     // Debería ser imposible llegar aquí gracias a la función embebida
                     $z['tabla'] = [];
                 }
+
+                // Obtener fixture por zona
+                $stmt = $db->prepare("
+                    SELECT p.*, el.nombre as equipo_local, el.logo as logo_local, 
+                           ev.nombre as equipo_visitante, ev.logo as logo_visitante, 
+                           c.nombre as cancha, f.numero_fecha, z.nombre as zona_nombre
+                    FROM partidos p
+                    JOIN zonas z ON p.zona_id = z.id
+                    JOIN equipos el ON p.equipo_local_id = el.id
+                    JOIN equipos ev ON p.equipo_visitante_id = ev.id
+                    LEFT JOIN canchas c ON p.cancha_id = c.id
+                    LEFT JOIN fechas f ON p.fecha_id = f.id
+                    WHERE p.zona_id = ? AND p.tipo_torneo = 'zona'
+                    ORDER BY p.jornada_zona ASC, p.fecha_partido ASC, p.hora_partido ASC
+                ");
+                $stmt->execute([$z['id']]);
+                $partidos_zona = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $formato_fixture_zonas[$formato['id']][] = [
+                    'zona' => $z,
+                    'partidos' => $partidos_zona
+                ];
             }
             $zonas_data[] = ['formato' => $formato, 'zonas' => $zonas];
+
+            // Fases eliminatorias y partidos
+            $stmtF = $db->prepare("
+                SELECT * FROM fases_eliminatorias 
+                WHERE formato_id = ? 
+                ORDER BY orden
+            ");
+            $stmtF->execute([$formato['id']]);
+            $fases = $stmtF->fetchAll(PDO::FETCH_ASSOC);
+            $formato_fases[$formato['id']] = $fases;
+
+            foreach ($fases as $fase) {
+                $fase_ids[] = (int)$fase['id'];
+                $stmtPartidos = $db->prepare("
+                    SELECT 
+                        p.*,
+                        el.nombre as equipo_local_nombre,
+                        el.logo as logo_local,
+                        ev.nombre as equipo_visitante_nombre,
+                        ev.logo as logo_visitante,
+                        c.nombre as cancha_nombre
+                    FROM partidos p
+                    LEFT JOIN equipos el ON p.equipo_local_id = el.id
+                    LEFT JOIN equipos ev ON p.equipo_visitante_id = ev.id
+                    LEFT JOIN canchas c ON p.cancha_id = c.id
+                    WHERE p.fase_eliminatoria_id = ? AND p.tipo_torneo = 'eliminatoria'
+                    ORDER BY p.numero_llave
+                ");
+                $stmtPartidos->execute([$fase['id']]);
+                $formato_partidos_eliminatorios[$formato['id']][$fase['id']] = $stmtPartidos->fetchAll(PDO::FETCH_ASSOC);
+            }
         } catch (Exception $e) {
             error_log("Error en zonas del formato {$formato['id']}: " . $e->getMessage());
         }
+    }
+}
+$zona_ids = array_values(array_unique(array_filter($zona_ids)));
+$fase_ids = array_values(array_unique(array_filter($fase_ids)));
+
+$zonas_data_con_zonas = array_values(array_filter($zonas_data, function ($pack) {
+    return !empty($pack['zonas']);
+}));
+
+// ================ CONSTRUIR FIXTURE ZONAS ================
+$fixture_zonas = [];
+foreach ($formato_fixture_zonas as $formato_id => $zonas_fixture) {
+    foreach ($zonas_fixture as $zona_fixture) {
+        $fixture_zonas[] = $zona_fixture;
     }
 }
 
@@ -148,7 +286,7 @@ if (empty($formatos) && !empty($categoria_ids)) {
         FROM equipos e
         LEFT JOIN partidos p ON (p.equipo_local_id = e.id OR p.equipo_visitante_id = e.id) 
                               AND p.estado = 'finalizado'
-                              AND (p.tipo_torneo = 'normal' OR p.tipo_torneo IS NULL)
+                              AND (p.tipo_torneo = 'zona' OR p.tipo_torneo = 'eliminatoria')
         LEFT JOIN fechas f ON p.fecha_id = f.id AND f.categoria_id IN ($placeholder_cat)
         WHERE e.categoria_id IN ($placeholder_cat) AND e.activo = 1
         GROUP BY e.id, e.nombre, e.logo
@@ -161,41 +299,60 @@ if (empty($formatos) && !empty($categoria_ids)) {
 
 // ================ OTRAS SECCIONES (Resultados, Fixture, etc.) ================
 // (Se mantienen exactamente como en tu archivo original, sin cambios)
-$placeholder_cat = implode(',', array_fill(0, count($categoria_ids), '?'));
-$resultados = $fixture = $fixture_zonas = $goleadores = $fairplay = $sanciones = $equipos = [];
+$resultados = $fixture = $goleadores = $fairplay = $sanciones = $equipos = [];
 
 if (!empty($categoria_ids)) {
-    // Resultados
-    $sql = "
-        SELECT p.*, el.nombre as equipo_local, ev.nombre as equipo_visitante, c.nombre as cancha, f.numero_fecha
-        FROM partidos p
-        JOIN fechas f ON p.fecha_id = f.id
-        JOIN equipos el ON p.equipo_local_id = el.id
-        JOIN equipos ev ON p.equipo_visitante_id = ev.id
-        LEFT JOIN canchas c ON p.cancha_id = c.id
-        WHERE f.categoria_id IN ($placeholder_cat) AND p.estado = 'finalizado'
-        ORDER BY p.finalizado_at DESC, p.fecha_partido DESC, p.hora_partido DESC
-        LIMIT 20
-    ";
-    $stmt = $db->prepare($sql);
-    $stmt->execute($categoria_ids);
-    $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $placeholder_cat = implode(',', array_fill(0, count($categoria_ids), '?'));
+    // Resultados - Solo partidos de zonas y eliminatorias
+    if (!empty($zona_ids)) {
+        $placeholder_zona = implode(',', array_fill(0, count($zona_ids), '?'));
+        $sql = "
+            SELECT p.*, el.nombre as equipo_local, el.logo as logo_local, ev.nombre as equipo_visitante, ev.logo as logo_visitante, 
+                   c.nombre as cancha, f.numero_fecha, z.nombre as zona_nombre
+            FROM partidos p
+            LEFT JOIN zonas z ON p.zona_id = z.id
+            LEFT JOIN fechas f ON p.fecha_id = f.id
+            JOIN equipos el ON p.equipo_local_id = el.id
+            JOIN equipos ev ON p.equipo_visitante_id = ev.id
+            LEFT JOIN canchas c ON p.cancha_id = c.id
+            WHERE ((p.zona_id IN ($placeholder_zona) AND p.tipo_torneo = 'zona') 
+                   OR (p.tipo_torneo = 'eliminatoria' AND f.categoria_id IN ($placeholder_cat)))
+              AND p.estado = 'finalizado'
+            ORDER BY p.finalizado_at DESC, p.fecha_partido DESC, p.hora_partido DESC
+            LIMIT 20
+        ";
+        $stmt = $db->prepare($sql);
+        $stmt->execute(array_merge($zona_ids, $categoria_ids));
+        $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $resultados = [];
+    }
 
-    // Fixture normal
-    $sql = "
-        SELECT p.*, el.nombre as equipo_local, ev.nombre as equipo_visitante, c.nombre as cancha, f.numero_fecha
-        FROM partidos p
-        JOIN fechas f ON p.fecha_id = f.id
-        JOIN equipos el ON p.equipo_local_id = el.id
-        JOIN equipos ev ON p.equipo_visitante_id = ev.id
-        LEFT JOIN canchas c ON p.cancha_id = c.id
-        WHERE f.categoria_id IN ($placeholder_cat) AND p.estado IN ('programado','sin_asignar') AND (p.tipo_torneo = 'normal' OR p.tipo_torneo IS NULL)
-        ORDER BY p.fecha_partido ASC, p.hora_partido ASC
-        LIMIT 20
-    ";
-    $stmt = $db->prepare($sql);
-    $stmt->execute($categoria_ids);
-    $fixture = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Fixture normal - Solo para torneos sin zonas (sin formatos)
+    // Si hay formatos (zonas), siempre usar fixture_zonas y no buscar fixture normal
+    if (empty($formatos)) {
+        // Solo buscar fixture normal si no hay formatos con zonas
+        $sql = "
+            SELECT p.*, el.nombre as equipo_local, el.logo as logo_local, ev.nombre as equipo_visitante, ev.logo as logo_visitante, 
+                   c.nombre as cancha, f.numero_fecha
+            FROM partidos p
+            JOIN fechas f ON p.fecha_id = f.id
+            JOIN equipos el ON p.equipo_local_id = el.id
+            JOIN equipos ev ON p.equipo_visitante_id = ev.id
+            LEFT JOIN canchas c ON p.cancha_id = c.id
+            WHERE f.categoria_id IN ($placeholder_cat) 
+              AND (p.tipo_torneo = 'zona' OR p.tipo_torneo = 'eliminatoria' OR p.tipo_torneo IS NULL)
+              AND p.estado IN ('pendiente','programado','sin_asignar','reprogramado')
+            ORDER BY p.fecha_partido ASC, p.hora_partido ASC
+            LIMIT 20
+        ";
+        $stmt = $db->prepare($sql);
+        $stmt->execute($categoria_ids);
+        $fixture = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        // Si hay formatos (zonas), no usar fixture normal
+        $fixture = [];
+    }
 
     // Goleadores
     $sql = "
@@ -205,7 +362,9 @@ if (!empty($categoria_ids)) {
         JOIN fechas f ON p.fecha_id = f.id
         JOIN jugadores j ON ev.jugador_id = j.id
         JOIN equipos e ON j.equipo_id = e.id
-        WHERE ev.tipo_evento = 'gol' AND f.categoria_id IN ($placeholder_cat)
+        WHERE ev.tipo_evento = 'gol' 
+          AND f.categoria_id IN ($placeholder_cat)
+          AND (p.tipo_torneo = 'zona' OR p.tipo_torneo = 'eliminatoria')
         GROUP BY j.id, j.apellido_nombre, e.nombre
         HAVING goles > 0
         ORDER BY goles DESC, j.apellido_nombre ASC
@@ -249,6 +408,7 @@ if (!empty($categoria_ids)) {
         LEFT JOIN fechas f ON p.fecha_id = f.id
         WHERE e.categoria_id IN ($placeholder_cat) AND e.activo = 1
           AND (f.categoria_id IN ($placeholder_cat) OR f.categoria_id IS NULL)
+          AND (p.tipo_torneo = 'zona' OR p.tipo_torneo = 'eliminatoria' OR p.tipo_torneo IS NULL OR p.id IS NULL)
         GROUP BY e.id, e.nombre, e.logo, e.color_camiseta        
         ORDER BY puntos ASC, amarillas ASC, e.nombre ASC
     ";
@@ -277,11 +437,16 @@ if ($campeonato) {
             JOIN jugadores j ON s.jugador_id = j.id
             JOIN equipos e ON j.equipo_id = e.id
             JOIN categorias c ON e.categoria_id = c.id
-            WHERE c.campeonato_id = ? AND s.activa = 1
+            WHERE c.campeonato_id = ? " . ($categoriaSeleccionadaId ? "AND c.id = ? " : "") . "
+              AND s.activa = 1
             ORDER BY s.fecha_sancion DESC, s.activa DESC
         ";
         $stmt = $db->prepare($sql);
-        $stmt->execute([$campeonato['id']]);
+        $params = [$campeonato['id']];
+        if ($categoriaSeleccionadaId) {
+            $params[] = $categoriaSeleccionadaId;
+        }
+        $stmt->execute($params);
         $sanciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
         error_log("Error en sanciones: " . $e->getMessage());
@@ -289,33 +454,6 @@ if ($campeonato) {
     }
 }
 
-// Fixture de zonas (partidos)
-if (!empty($formatos)) {
-    foreach ($formatos as $formato) {
-        $stmtZ = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
-        $stmtZ->execute([$formato['id']]);
-        $zonas_fixture = $stmtZ->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($zonas_fixture as $zona) {
-            $sql = "
-                SELECT p.*, el.nombre as equipo_local, el.logo as logo_local, 
-                       ev.nombre as equipo_visitante, ev.logo as logo_visitante, 
-                       c.nombre as cancha, f.numero_fecha, z.nombre as zona_nombre
-                FROM partidos p
-                JOIN zonas z ON p.zona_id = z.id
-                JOIN equipos el ON p.equipo_local_id = el.id
-                JOIN equipos ev ON p.equipo_visitante_id = ev.id
-                LEFT JOIN canchas c ON p.cancha_id = c.id
-                LEFT JOIN fechas f ON p.fecha_id = f.id
-                WHERE p.zona_id = ? AND p.tipo_torneo = 'zona'
-                ORDER BY p.jornada_zona ASC, p.fecha_partido ASC, p.hora_partido ASC
-            ";
-            $stmt = $db->prepare($sql);
-            $stmt->execute([$zona['id']]);
-            $partidos_zona = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            $fixture_zonas[] = ['zona' => $zona, 'partidos' => $partidos_zona];
-        }
-    }
-}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -1342,9 +1480,45 @@ if (!empty($formatos)) {
                     </span>
                 </div>
             </div>
+            <?php if (count($categorias) > 1): ?>
+                <div class="row mt-3">
+                    <div class="col-lg-6">
+                        <form method="GET" class="row g-2 align-items-center text-white-50">
+                            <?php if ($campeonatoIdSeleccionado): ?>
+                                <input type="hidden" name="campeonato_id" value="<?= $campeonatoIdSeleccionado ?>">
+                            <?php endif; ?>
+                            <div class="col-auto">
+                                <label class="form-label text-white-50 small mb-0" for="categoriaSelect">Categoría</label>
+                            </div>
+                            <div class="col">
+                                <select id="categoriaSelect" name="categoria_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                                    <?php foreach ($categorias as $cat): ?>
+                                        <option value="<?= $cat['id'] ?>" <?= (int)$cat['id'] === (int)$categoriaSeleccionadaId ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($cat['nombre']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            <?php elseif ($categoriaSeleccionada): ?>
+                <div class="row mt-3">
+                    <div class="col-lg-6">
+                        <span class="badge bg-light text-dark">
+                            <i class="fas fa-tag me-1"></i> Categoría: <?= htmlspecialchars($categoriaSeleccionada['nombre']); ?>
+                        </span>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
     <div class="container my-4">
+        <?php if (empty($categoria_ids)): ?>
+            <div class="alert alert-warning shadow-sm">
+                No hay categorías activas asociadas a este Torneo Nocturno. Vuelve más tarde para ver la información completa.
+            </div>
+        <?php else: ?>
         <ul class="nav nav-tabs" id="nocturnoTabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-posiciones" type="button" role="tab">
@@ -1388,8 +1562,8 @@ if (!empty($formatos)) {
             
             <!-- Posiciones por Zonas -->
             <div class="tab-pane fade show active" id="tab-posiciones" role="tabpanel">
-                <?php if (!empty($zonas_data)): ?>
-                    <?php foreach ($zonas_data as $pack): $formato = $pack['formato']; $zlist = $pack['zonas']; ?>
+                <?php if (!empty($zonas_data_con_zonas)): ?>
+                    <?php foreach ($zonas_data_con_zonas as $pack): $formato = $pack['formato']; $zlist = $pack['zonas']; ?>
                         <div class="card mb-4">
                             <div class="card-header">
                                 <i class="fas fa-layer-group me-2"></i>
@@ -1475,6 +1649,11 @@ if (!empty($formatos)) {
                             </div>
                         </div>
                     <?php endforeach; ?>
+                <?php elseif (!empty($formatos)): ?>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Aún no hay datos registrados en las zonas de esta categoría.
+                    </div>
                 <?php elseif (!empty($tabla_posiciones_general)): ?>
                     <div class="card">
                         <div class="card-header bg-success text-white">
@@ -1658,6 +1837,150 @@ if (!empty($formatos)) {
                             </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
+                    
+                    <!-- Fases Eliminatorias -->
+                    <?php if (!empty($formato_fases)): ?>
+                        <?php foreach ($formato_fases as $formato_id => $fases): ?>
+                            <?php if (!empty($fases)): ?>
+                                <div class="card mb-4">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h6 class="mb-0">
+                                            <i class="fas fa-trophy me-2"></i>Fases Eliminatorias
+                                        </h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <?php foreach ($fases as $fase): ?>
+                                            <?php if (!empty($formato_partidos_eliminatorios[$formato_id][$fase['id']])): ?>
+                                                <div class="mb-4">
+                                                    <h6 class="mb-3">
+                                                        <?php
+                                                        $nombre_fase = [
+                                                            'dieciseisavos' => 'Dieciseisavos de Final',
+                                                            'octavos' => 'Octavos de Final',
+                                                            'cuartos' => 'Cuartos de Final',
+                                                            'semifinal' => 'Semifinales',
+                                                            'final' => 'Final',
+                                                            'tercer_puesto' => 'Tercer Puesto'
+                                                        ];
+                                                        echo $nombre_fase[$fase['nombre']] ?? $fase['nombre'];
+                                                        ?>
+                                                    </h6>
+                                                    <div class="row">
+                                                        <?php foreach ($formato_partidos_eliminatorios[$formato_id][$fase['id']] as $partido): ?>
+                                                            <div class="col-md-6 col-lg-4 mb-3">
+                                                                <div class="card border">
+                                                                    <div class="card-body p-3">
+                                                                        <div class="text-center mb-2">
+                                                                            <small class="text-muted">Llave <?= $partido['numero_llave'] ?></small>
+                                                                            <?php if ($partido['fecha_partido']): ?>
+                                                                                <br><small><?= date('d/m/Y', strtotime($partido['fecha_partido'])) ?></small>
+                                                                                <?php if ($partido['hora_partido']): ?>
+                                                                                    <br><small><?= date('H:i', strtotime($partido['hora_partido'])) ?></small>
+                                                                                <?php endif; ?>
+                                                                            <?php endif; ?>
+                                                                        </div>
+                                                                        
+                                                                        <?php
+                                                                        // Calcular ganador
+                                                                        $ganador_id = null;
+                                                                        if ($partido['estado'] === 'finalizado' && isset($partido['goles_local']) && isset($partido['goles_visitante'])) {
+                                                                            if ($partido['goles_local_penales'] !== null) {
+                                                                                // Hubo penales
+                                                                                $ganador_id = $partido['goles_local_penales'] > $partido['goles_visitante_penales'] 
+                                                                                    ? $partido['equipo_local_id'] 
+                                                                                    : $partido['equipo_visitante_id'];
+                                                                            } else {
+                                                                                // Sin penales
+                                                                                $ganador_id = $partido['goles_local'] > $partido['goles_visitante'] 
+                                                                                    ? $partido['equipo_local_id'] 
+                                                                                    : ($partido['goles_local'] < $partido['goles_visitante'] ? $partido['equipo_visitante_id'] : null);
+                                                                            }
+                                                                        }
+                                                                        ?>
+                                                                        
+                                                                        <div class="d-flex align-items-center mb-2 p-2 rounded <?= $ganador_id == $partido['equipo_local_id'] ? 'bg-light' : '' ?>">
+                                                                            <?php if ($partido['equipo_local_id']): ?>
+                                                                                <?php if (!empty($partido['logo_local'])): ?>
+                                                                                    <img src="../uploads/<?= htmlspecialchars($partido['logo_local']) ?>" 
+                                                                                         class="me-2" alt="Logo" style="width: 24px; height: 24px;">
+                                                                                <?php endif; ?>
+                                                                                <span class="flex-grow-1 <?= $ganador_id == $partido['equipo_local_id'] ? 'fw-bold' : '' ?>">
+                                                                                    <?= htmlspecialchars($partido['equipo_local_nombre']) ?>
+                                                                                </span>
+                                                                                <?php if (isset($partido['goles_local'])): ?>
+                                                                                    <span class="ms-2 fw-bold">
+                                                                                        <?= $partido['goles_local'] ?>
+                                                                                        <?php if (isset($partido['goles_local_penales']) && $partido['goles_local_penales'] !== null): ?>
+                                                                                            <small class="text-muted d-block" style="font-size: 0.7rem;">
+                                                                                                (<?= $partido['goles_local_penales'] ?> pen.)
+                                                                                            </small>
+                                                                                        <?php endif; ?>
+                                                                                    </span>
+                                                                                <?php endif; ?>
+                                                                            <?php else: ?>
+                                                                                <em class="text-muted"><?= htmlspecialchars($partido['origen_local'] ?? 'Por definir') ?></em>
+                                                                            <?php endif; ?>
+                                                                        </div>
+                                                                        
+                                                                        <div class="text-center mb-2">
+                                                                            <small class="text-muted">VS</small>
+                                                                        </div>
+                                                                        
+                                                                        <div class="d-flex align-items-center mb-2 p-2 rounded <?= $ganador_id == $partido['equipo_visitante_id'] ? 'bg-light' : '' ?>">
+                                                                            <?php if ($partido['equipo_visitante_id']): ?>
+                                                                                <?php if (!empty($partido['logo_visitante'])): ?>
+                                                                                    <img src="../uploads/<?= htmlspecialchars($partido['logo_visitante']) ?>" 
+                                                                                         class="me-2" alt="Logo" style="width: 24px; height: 24px;">
+                                                                                <?php endif; ?>
+                                                                                <span class="flex-grow-1 <?= $ganador_id == $partido['equipo_visitante_id'] ? 'fw-bold' : '' ?>">
+                                                                                    <?= htmlspecialchars($partido['equipo_visitante_nombre']) ?>
+                                                                                </span>
+                                                                                <?php if (isset($partido['goles_visitante'])): ?>
+                                                                                    <span class="ms-2 fw-bold">
+                                                                                        <?= $partido['goles_visitante'] ?>
+                                                                                        <?php if (isset($partido['goles_visitante_penales']) && $partido['goles_visitante_penales'] !== null): ?>
+                                                                                            <small class="text-muted d-block" style="font-size: 0.7rem;">
+                                                                                                (<?= $partido['goles_visitante_penales'] ?> pen.)
+                                                                                            </small>
+                                                                                        <?php endif; ?>
+                                                                                    </span>
+                                                                                <?php endif; ?>
+                                                                            <?php else: ?>
+                                                                                <em class="text-muted"><?= htmlspecialchars($partido['origen_visitante'] ?? 'Por definir') ?></em>
+                                                                            <?php endif; ?>
+                                                                        </div>
+                                                                        
+                                                                        <?php if (isset($partido['goles_local_penales']) && $partido['goles_local_penales'] !== null): ?>
+                                                                            <div class="text-center mt-2">
+                                                                                <small class="text-muted">
+                                                                                    Resultado: <?= $partido['goles_local'] ?> - <?= $partido['goles_visitante'] ?> 
+                                                                                    (<?= $partido['goles_local_penales'] ?> - <?= $partido['goles_visitante_penales'] ?> pen.)
+                                                                                </small>
+                                                                            </div>
+                                                                        <?php endif; ?>
+                                                                        
+                                                                        <div class="text-center mt-2">
+                                                                            <span class="badge bg-<?= $partido['estado'] === 'finalizado' ? 'success' : ($partido['estado'] === 'programado' ? 'primary' : 'secondary') ?>">
+                                                                                <?= ucfirst($partido['estado']) ?>
+                                                                            </span>
+                                                                            <?php if ($partido['cancha_nombre']): ?>
+                                                                                <br><small class="text-muted"><?= htmlspecialchars($partido['cancha_nombre']) ?></small>
+                                                                            <?php endif; ?>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        <?php endforeach; ?>
+                                                    </div>
+                                                </div>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                    
                     <?php if (!empty($fixture)): ?>
                         <div class="card">
                             <div class="card-header bg-success">
@@ -1683,9 +2006,25 @@ if (!empty($formatos)) {
                                                 <tr>
                                                     <td class="hide-xs"><?= $p['fecha_partido'] ? date('d/m/Y', strtotime($p['fecha_partido'])) : '-' ?></td>
                                                     <td class="d-none-mobile"><?= $p['hora_partido'] ? date('H:i', strtotime($p['hora_partido'])) : '-' ?></td>
-                                                    <td class="fw-medium"><?= htmlspecialchars($p['equipo_local']) ?></td>
+                                                    <td>
+                                                        <div class="d-flex align-items-center">
+                                                            <?php if (!empty($p['logo_local'])): ?>
+                                                                <img src="../uploads/<?= htmlspecialchars($p['logo_local']) ?>" 
+                                                                     class="team-logo me-2" alt="Logo" style="width: 24px; height: 24px;">
+                                                            <?php endif; ?>
+                                                            <span class="fw-medium"><?= htmlspecialchars($p['equipo_local']) ?></span>
+                                                        </div>
+                                                    </td>
                                                     <td class="text-center text-muted" style="width: 40px;">vs</td>
-                                                    <td class="fw-medium"><?= htmlspecialchars($p['equipo_visitante']) ?></td>
+                                                    <td>
+                                                        <div class="d-flex align-items-center">
+                                                            <?php if (!empty($p['logo_visitante'])): ?>
+                                                                <img src="../uploads/<?= htmlspecialchars($p['logo_visitante']) ?>" 
+                                                                     class="team-logo me-2" alt="Logo" style="width: 24px; height: 24px;">
+                                                            <?php endif; ?>
+                                                            <span class="fw-medium"><?= htmlspecialchars($p['equipo_visitante']) ?></span>
+                                                        </div>
+                                                    </td>
                                                     <td class="text-muted hide-xs"><?= htmlspecialchars($p['cancha'] ?? 'Por confirmar') ?></td>
                                                 </tr>
                                             <?php endforeach; ?>
@@ -2180,6 +2519,7 @@ if (!empty($formatos)) {
                 <?php endif; ?>
             </div>
         </div>
+        <?php endif; ?>
     </div>
     <div class="container">
         <footer class="footer">

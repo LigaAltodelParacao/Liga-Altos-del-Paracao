@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1:3306
--- Tiempo de generación: 13-11-2025 a las 14:11:05
+-- Tiempo de generación: 13-11-2025 a las 19:23:24
 -- Versión del servidor: 11.8.3-MariaDB-log
 -- Versión de PHP: 7.2.34
 
@@ -37,13 +37,6 @@ CREATE TABLE `campeonatos` (
   `es_torneo_nocturno` tinyint(1) DEFAULT 0 COMMENT 'Indica si es un torneo nocturno (por zonas)',
   `created_at` timestamp NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Volcado de datos para la tabla `campeonatos`
---
-
-INSERT INTO `campeonatos` (`id`, `nombre`, `descripcion`, `fecha_inicio`, `fecha_fin`, `activo`, `es_torneo_nocturno`, `created_at`) VALUES
-(13, 'Nocturno 2026', '', '2025-11-14', NULL, 1, 0, '2025-11-13 13:51:32');
 
 -- --------------------------------------------------------
 
@@ -128,13 +121,6 @@ CREATE TABLE `categorias` (
   `activa` tinyint(1) DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
---
--- Volcado de datos para la tabla `categorias`
---
-
-INSERT INTO `categorias` (`id`, `campeonato_id`, `nombre`, `descripcion`, `activa`) VALUES
-(35, 13, 'Femenino', '', 1);
-
 -- --------------------------------------------------------
 
 --
@@ -168,18 +154,6 @@ CREATE TABLE `equipos` (
   `activo` tinyint(1) DEFAULT 1,
   `created_at` timestamp NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Volcado de datos para la tabla `equipos`
---
-
-INSERT INTO `equipos` (`id`, `categoria_id`, `nombre`, `logo`, `color_camiseta`, `director_tecnico`, `activo`, `created_at`) VALUES
-(306, 35, 'Pichi FC Fem', NULL, '#007bff', '', 1, '2025-11-13 13:53:22'),
-(307, 35, 'Pikis', NULL, '#007bff', '', 1, '2025-11-13 13:53:30'),
-(308, 35, 'Monas Team Fem', NULL, '#007bff', '', 1, '2025-11-13 13:53:36'),
-(309, 35, 'La Ternera Fem', NULL, '#007bff', '', 1, '2025-11-13 13:53:42'),
-(310, 35, 'EPAP Femenino', NULL, '#007bff', '', 1, '2025-11-13 13:53:48'),
-(311, 35, 'The Yegüas FC', NULL, '#007bff', '', 1, '2025-11-13 13:53:54');
 
 -- --------------------------------------------------------
 
@@ -220,6 +194,7 @@ CREATE TABLE `eventos_partido` (
   `minuto` int(11) NOT NULL,
   `observaciones` varchar(255) DEFAULT NULL,
   `tipo_partido` varchar(20) DEFAULT 'normal',
+  `es_torneo_zonal` tinyint(1) DEFAULT 0 COMMENT 'Indica si este evento pertenece a un torneo por zonas (1) o torneo largo (0)',
   `created_at` timestamp NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -230,6 +205,8 @@ DELIMITER $$
 CREATE TRIGGER `trg_eventos_partido_campeonato` BEFORE INSERT ON `eventos_partido` FOR EACH ROW BEGIN
     DECLARE v_campeonato_id INT;
     DECLARE v_tipo_torneo VARCHAR(20);
+    DECLARE v_tipo_campeonato VARCHAR(10);
+    DECLARE v_es_torneo_zonal TINYINT(1);
     
     -- Obtener campeonato_id y tipo_torneo del partido
     SELECT 
@@ -258,8 +235,34 @@ CREATE TRIGGER `trg_eventos_partido_campeonato` BEFORE INSERT ON `eventos_partid
     FROM partidos 
     WHERE id = NEW.partido_id;
     
+    -- Determinar si es torneo zonal
+    -- Si el tipo_torneo es 'zona' o 'eliminatoria' (de un torneo zonal), entonces es zonal
+    -- También verificamos el tipo_campeonato del campeonato
+    IF v_campeonato_id IS NOT NULL THEN
+        SELECT COALESCE(tipo_campeonato, 
+                        CASE WHEN es_torneo_nocturno = 1 THEN 'zonal' ELSE 'largo' END) 
+        INTO v_tipo_campeonato
+        FROM campeonatos
+        WHERE id = v_campeonato_id;
+        
+        -- Si el tipo_campeonato es 'zonal' O el tipo_torneo es 'zona'/'eliminatoria', es zonal
+        IF (v_tipo_campeonato = 'zonal' OR v_tipo_torneo IN ('zona', 'eliminatoria')) THEN
+            SET v_es_torneo_zonal = 1;
+        ELSE
+            SET v_es_torneo_zonal = 0;
+        END IF;
+    ELSE
+        -- Si no se puede determinar el campeonato, usar el tipo_torneo como referencia
+        IF v_tipo_torneo IN ('zona', 'eliminatoria') THEN
+            SET v_es_torneo_zonal = 1;
+        ELSE
+            SET v_es_torneo_zonal = 0;
+        END IF;
+    END IF;
+    
     SET NEW.campeonato_id = v_campeonato_id;
     SET NEW.tipo_partido = COALESCE(v_tipo_torneo, 'normal');
+    SET NEW.es_torneo_zonal = COALESCE(v_es_torneo_zonal, 0);
 END
 $$
 DELIMITER ;

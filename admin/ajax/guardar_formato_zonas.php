@@ -72,9 +72,11 @@ try {
     }
     
     // Crear las fases eliminatorias
+    // IMPORTANTE: Las fases se crean con activa=1 y generada=0
+    // Los partidos se generarán después cuando se completen los partidos de grupos
     $stmt_fase = $db->prepare("
-        INSERT INTO fases_eliminatorias (formato_id, nombre, orden)
-        VALUES (?, ?, ?)
+        INSERT INTO fases_eliminatorias (formato_id, nombre, orden, activa, generada)
+        VALUES (?, ?, ?, 1, 0)
     ");
     
     $orden = 1;

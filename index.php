@@ -593,114 +593,116 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
     <!-- Main Content -->
     <div class="container my-3">
         <?php if (!empty($partidos_vivo)): ?>
-        <div class="col-12 mb-3">
-            <div class="text-center mb-3">
-                <h3 class="fw-bold">
-                    <i class="fas fa-broadcast-tower text-danger"></i> PARTIDOS EN VIVO
-                </h3>
-            </div>
-            
-            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2" id="live-matches-container">
-                <?php foreach ($partidos_vivo as $partido): ?>
-                <div class="col" onclick="mostrarEventosModal(<?= $partido['id'] ?>)">
-                    <div class="live-match-card" data-partido-id="<?= $partido['id'] ?>">
-                        <!-- Header -->
-                        <div class="match-header">
-                            <span class="match-badge">
-                                <span class="live-dot"></span> EN VIVO
-                            </span>
-                            <span class="match-info">
-                                <i class="fas fa-calendar-alt"></i> Fecha <?= $partido['numero_fecha'] ?>
-                            </span>
-                        </div>
-
-                        <!-- Equipos y goles -->
-                        <div class="teams-container">
-                            <div class="team-row">
-                                <span class="team-name" title="<?= htmlspecialchars($partido['equipo_local']) ?>">
-                                    <?= htmlspecialchars($partido['equipo_local']) ?>
+        <div class="row">
+            <div class="col-12 mb-3">
+                <div class="text-center mb-3">
+                    <h3 class="fw-bold">
+                        <i class="fas fa-broadcast-tower text-danger"></i> PARTIDOS EN VIVO
+                    </h3>
+                </div>
+                
+                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2" id="live-matches-container">
+                    <?php foreach ($partidos_vivo as $partido): ?>
+                    <div class="col" onclick="mostrarEventosModal(<?= $partido['id'] ?>)">
+                        <div class="live-match-card" data-partido-id="<?= $partido['id'] ?>">
+                            <!-- Header -->
+                            <div class="match-header">
+                                <span class="match-badge">
+                                    <span class="live-dot"></span> EN VIVO
                                 </span>
-                                <?php if ($partido['logo_local']): ?>
-                                    <img src="uploads/<?= $partido['logo_local'] ?>" class="team-logo" alt="<?= $partido['equipo_local'] ?>">
-                                <?php else: ?>
-                                    <span class="logo-placeholder"><?= substr($partido['equipo_local'], 0, 1) ?></span>
-                                <?php endif; ?>
-                                <span class="team-score goles-local" data-partido-id="<?= $partido['id'] ?>">
-                                    <?= $partido['goles_local'] ?>
+                                <span class="match-info">
+                                    <i class="fas fa-calendar-alt"></i> Fecha <?= $partido['numero_fecha'] ?>
                                 </span>
                             </div>
 
-                            <div class="team-row">
-                                <span class="team-name" title="<?= htmlspecialchars($partido['equipo_visitante']) ?>">
-                                    <?= htmlspecialchars($partido['equipo_visitante']) ?>
-                                </span>
-                                <?php if ($partido['logo_visitante']): ?>
-                                    <img src="uploads/<?= $partido['logo_visitante'] ?>" class="team-logo" alt="<?= $partido['equipo_visitante'] ?>">
-                                <?php else: ?>
-                                    <span class="logo-placeholder"><?= substr($partido['equipo_visitante'], 0, 1) ?></span>
-                                <?php endif; ?>
-                                <span class="team-score goles-visitante" data-partido-id="<?= $partido['id'] ?>">
-                                    <?= $partido['goles_visitante'] ?>
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Minuto de juego (usando minuto_periodo) -->
-                        <div class="match-timer">
-                            <div class="timer-display" 
-                                 data-partido-id="<?= $partido['id'] ?>" 
-                                 data-minuto="<?= $partido['minuto_periodo'] ?>" 
-                                 data-segundos="<?= $partido['segundos_transcurridos'] ?>"
-                                 data-tiempo="<?= htmlspecialchars($partido['tiempo_actual']) ?>"
-                                 data-iniciado="<?= $partido['iniciado_at'] ?>">
-                                <?php 
-                                    if ($partido['tiempo_actual'] === 'descanso') {
-                                        echo 'Descanso';
-                                    } elseif ($partido['tiempo_actual'] === 'finalizado') {
-                                        echo 'Finalizado';
-                                    } else {
-                                        // Usar minuto_periodo del servidor (calculado correctamente en partido_live.php)
-                                        $minutoPeriodo = (int)($partido['minuto_periodo'] ?? 0);
-                                        $tiempoActual = $partido['tiempo_actual'] ?? '';
-                                        $segundosTotales = (int)($partido['segundos_transcurridos'] ?? 0);
-                                        $secs = $segundosTotales % 60;
-                                        
-                                        // Formato igual que partido_live.php: mostrar MM:SS
-                                        if ($minutoPeriodo <= 30) {
-                                            $texto = str_pad($minutoPeriodo, 2, '0', STR_PAD_LEFT) . ':' . str_pad($secs, 2, '0', STR_PAD_LEFT);
-                                        } else {
-                                            $minutosExtra = $minutoPeriodo - 30;
-                                            $texto = "30'" . ($minutosExtra > 0 ? '+' . $minutosExtra : '') . "'";
-                                        }
-                                        
-                                        // Agregar período
-                                        $periodo = ($tiempoActual === 'primer_tiempo') ? ' 1°T' : ' 2°T';
-                                        echo $texto . $periodo;
-                                    }
-                                ?>
-                            </div>
-                        </div>
-
-                        <!-- Footer con ticker -->
-                        <div class="match-footer">
-                            <div class="footer-static">
-                                <div class="match-location" title="<?= htmlspecialchars($partido['cancha'] ?? 'Por confirmar') ?>">
-                                    <i class="fas fa-map-marker-alt"></i>
-                                    <?= htmlspecialchars($partido['cancha'] ?? 'Por confirmar') ?>
+                            <!-- Equipos y goles -->
+                            <div class="teams-container">
+                                <div class="team-row">
+                                    <span class="team-name" title="<?= htmlspecialchars($partido['equipo_local']) ?>">
+                                        <?= htmlspecialchars($partido['equipo_local']) ?>
+                                    </span>
+                                    <?php if ($partido['logo_local']): ?>
+                                        <img src="uploads/<?= $partido['logo_local'] ?>" class="team-logo" alt="<?= $partido['equipo_local'] ?>">
+                                    <?php else: ?>
+                                        <span class="logo-placeholder"><?= substr($partido['equipo_local'], 0, 1) ?></span>
+                                    <?php endif; ?>
+                                    <span class="team-score goles-local" data-partido-id="<?= $partido['id'] ?>">
+                                        <?= $partido['goles_local'] ?>
+                                    </span>
                                 </div>
-                                <span class="match-category">
-                                    <?= htmlspecialchars($partido['categoria']) ?>
-                                </span>
+
+                                <div class="team-row">
+                                    <span class="team-name" title="<?= htmlspecialchars($partido['equipo_visitante']) ?>">
+                                        <?= htmlspecialchars($partido['equipo_visitante']) ?>
+                                    </span>
+                                    <?php if ($partido['logo_visitante']): ?>
+                                        <img src="uploads/<?= $partido['logo_visitante'] ?>" class="team-logo" alt="<?= $partido['equipo_visitante'] ?>">
+                                    <?php else: ?>
+                                        <span class="logo-placeholder"><?= substr($partido['equipo_visitante'], 0, 1) ?></span>
+                                    <?php endif; ?>
+                                    <span class="team-score goles-visitante" data-partido-id="<?= $partido['id'] ?>">
+                                        <?= $partido['goles_visitante'] ?>
+                                    </span>
+                                </div>
                             </div>
-                            <div class="events-ticker" data-partido-id="<?= $partido['id'] ?>">
-                                <div class="ticker-content" id="ticker-<?= $partido['id'] ?>">
-                                    <!-- Eventos se cargarán aquí -->
+
+                            <!-- Minuto de juego (usando minuto_periodo) -->
+                            <div class="match-timer">
+                                <div class="timer-display" 
+                                     data-partido-id="<?= $partido['id'] ?>" 
+                                     data-minuto="<?= $partido['minuto_periodo'] ?>" 
+                                     data-segundos="<?= $partido['segundos_transcurridos'] ?>"
+                                     data-tiempo="<?= htmlspecialchars($partido['tiempo_actual']) ?>"
+                                     data-iniciado="<?= $partido['iniciado_at'] ?>">
+                                    <?php 
+                                        if ($partido['tiempo_actual'] === 'descanso') {
+                                            echo 'Descanso';
+                                        } elseif ($partido['tiempo_actual'] === 'finalizado') {
+                                            echo 'Finalizado';
+                                        } else {
+                                            // Usar minuto_periodo del servidor (calculado correctamente en partido_live.php)
+                                            $minutoPeriodo = (int)($partido['minuto_periodo'] ?? 0);
+                                            $tiempoActual = $partido['tiempo_actual'] ?? '';
+                                            $segundosTotales = (int)($partido['segundos_transcurridos'] ?? 0);
+                                            $secs = $segundosTotales % 60;
+                                            
+                                            // Formato igual que partido_live.php: mostrar MM:SS
+                                            if ($minutoPeriodo <= 30) {
+                                                $texto = str_pad($minutoPeriodo, 2, '0', STR_PAD_LEFT) . ':' . str_pad($secs, 2, '0', STR_PAD_LEFT);
+                                            } else {
+                                                $minutosExtra = $minutoPeriodo - 30;
+                                                $texto = "30'" . ($minutosExtra > 0 ? '+' . $minutosExtra : '') . "'";
+                                            }
+                                            
+                                            // Agregar período
+                                            $periodo = ($tiempoActual === 'primer_tiempo') ? ' 1°T' : ' 2°T';
+                                            echo $texto . $periodo;
+                                        }
+                                    ?>
+                                </div>
+                            </div>
+
+                            <!-- Footer con ticker -->
+                            <div class="match-footer">
+                                <div class="footer-static">
+                                    <div class="match-location" title="<?= htmlspecialchars($partido['cancha'] ?? 'Por confirmar') ?>">
+                                        <i class="fas fa-map-marker-alt"></i>
+                                        <?= htmlspecialchars($partido['cancha'] ?? 'Por confirmar') ?>
+                                    </div>
+                                    <span class="match-category">
+                                        <?= htmlspecialchars($partido['categoria']) ?>
+                                    </span>
+                                </div>
+                                <div class="events-ticker" data-partido-id="<?= $partido['id'] ?>">
+                                    <div class="ticker-content" id="ticker-<?= $partido['id'] ?>">
+                                        <!-- Eventos se cargarán aquí -->
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
+                    <?php endforeach; ?>
                 </div>
-                <?php endforeach; ?>
             </div>
         </div>
         <?php else: ?>
@@ -708,6 +710,38 @@ if (!empty($_GET['ajax']) && $_GET['ajax'] === 'eventos_ticker' && !empty($_GET[
             <i class="fas fa-calendar-times"></i>
             <h4 class="text-muted">No hay partidos en vivo ahora</h4>
             <p class="text-muted">Los partidos activos aparecerán automáticamente</p>
+        </div>
+        <?php endif; ?>
+        
+        <!-- Torneo Nocturno Section -->
+        <?php
+        // Buscar campeonato activo llamado "Torneo Nocturno"
+        $stmt_torneo_nocturno = $db->prepare("
+            SELECT id, nombre 
+            FROM campeonatos 
+            WHERE activo = 1 AND nombre LIKE ? 
+            ORDER BY fecha_inicio DESC, id DESC
+            LIMIT 1
+        ");
+        $stmt_torneo_nocturno->execute(['%Torneo Nocturno%']);
+        $torneo_nocturno = $stmt_torneo_nocturno->fetch(PDO::FETCH_ASSOC);
+        if ($torneo_nocturno):
+        ?>
+        <div class="row mt-4">
+            <div class="col-12 mb-3">
+                <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);">
+                    <div class="card-body text-center text-white p-4">
+                        <h3 class="fw-bold mb-3">
+                            <i class="fas fa-moon text-warning"></i> Torneo Nocturno
+                        </h3>
+                        <p class="mb-3">Seguí todas las posiciones, resultados y estadísticas del torneo nocturno</p>
+                        <a href="public/torneo_nocturno.php?campeonato_id=<?= $torneo_nocturno['id'] ?>" 
+                           class="btn btn-warning btn-lg px-5">
+                            <i class="fas fa-eye me-2"></i>Ver Torneo Nocturno
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
         <?php endif; ?>
     </div>

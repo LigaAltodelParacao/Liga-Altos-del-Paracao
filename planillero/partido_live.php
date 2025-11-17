@@ -51,18 +51,52 @@ try {
 }
 
 // Función crear sanción automática
-function crearSancionAutomatica($db, $jugador_id, $tipo, $partidos_suspension, $descripcion) {
+function crearSancionAutomatica($db, $jugador_id, $tipo, $partidos_suspension, $descripcion, $partido_id = null) {
+    // Verificar si ya existe una sanción activa del mismo tipo
     $stmt = $db->prepare("SELECT id FROM sanciones WHERE jugador_id = ? AND tipo = ? AND activa = 1");
     $stmt->execute([$jugador_id, $tipo]);
     if ($stmt->fetch()) {
         return;
     }
     
+    // Obtener campeonato_id y tipo_torneo del partido
+    $campeonato_id = null;
+    $tipo_torneo = 'normal';
+    
+    if ($partido_id) {
+        $stmt = $db->prepare("
+            SELECT 
+                p.tipo_torneo,
+                COALESCE(
+                    (SELECT c.campeonato_id 
+                     FROM fechas f 
+                     JOIN categorias c ON f.categoria_id = c.id 
+                     WHERE f.id = p.fecha_id AND p.tipo_torneo = 'normal'),
+                    (SELECT cf.campeonato_id 
+                     FROM zonas z 
+                     JOIN campeonatos_formato cf ON z.formato_id = cf.id 
+                     WHERE z.id = p.zona_id AND p.tipo_torneo = 'zona'),
+                    (SELECT cf.campeonato_id 
+                     FROM fases_eliminatorias fe 
+                     JOIN campeonatos_formato cf ON fe.formato_id = cf.id 
+                     WHERE fe.id = p.fase_eliminatoria_id AND p.tipo_torneo = 'eliminatoria')
+                ) as campeonato_id
+            FROM partidos p
+            WHERE p.id = ?
+        ");
+        $stmt->execute([$partido_id]);
+        $partido_info = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($partido_info) {
+            $campeonato_id = $partido_info['campeonato_id'];
+            $tipo_torneo = $partido_info['tipo_torneo'] ?? 'normal';
+        }
+    }
+    
     $stmt = $db->prepare("
-        INSERT INTO sanciones (jugador_id, tipo, partidos_suspension, partidos_cumplidos, descripcion, activa, fecha_sancion)
-        VALUES (?, ?, ?, 0, ?, 1, CURDATE())
+        INSERT INTO sanciones (jugador_id, campeonato_id, tipo_torneo, tipo, partidos_suspension, partidos_cumplidos, descripcion, activa, fecha_sancion)
+        VALUES (?, ?, ?, ?, 0, ?, 1, CURDATE())
     ");
-    $stmt->execute([$jugador_id, $tipo, $partidos_suspension, $descripcion]);
+    $stmt->execute([$jugador_id, $campeonato_id, $tipo_torneo, $tipo, $partidos_suspension, $descripcion]);
 }
 
 // PROCESAR ACCIONES AJAX
@@ -159,6 +193,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ajax_action'])) {
                 $minuto = $minuto_periodo; // Primer tiempo sin offset
             }
             
+            // NOTA: El trigger trg_eventos_partido_campeonato determina automáticamente
+            // el tipo de torneo (largo/zonal) y establece es_torneo_zonal y campeonato_id
             $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto) VALUES (?, ?, ?, ?)");
             $stmt->execute([$partido_id, $jugador_id, $tipo_evento, $minuto]);
             $evento_id = $db->lastInsertId();
@@ -215,6 +251,76 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ajax_action'])) {
             $goles_local = (int)$_POST['goles_local'];
             $goles_visitante = (int)$_POST['goles_visitante'];
             $observaciones = trim($_POST['observaciones'] ?? '');
+            
+            // Verificar si es partido eliminatorio y hay empate
+            $stmt = $db->prepare("SELECT fase_eliminatoria_id, tipo_torneo FROM partidos WHERE id = ?");
+            $stmt->execute([$partido_id]);
+            $partido_info = $stmt->fetch(PDO::FETCH_ASSOC);
+            $es_eliminatoria = ($partido_info['tipo_torneo'] === 'eliminatoria' && !empty($partido_info['fase_eliminatoria_id']));
+            $hay_empate = ($goles_local === $goles_visitante);
+            
+            // Si es eliminatoria y hay empate, guardar goles pero NO finalizar todavía - redirigir a cargar penales
+            if ($es_eliminatoria && $hay_empate) {
+                // Guardar los goles pero mantener el partido en curso para que se puedan cargar los penales
+                $stmt = $db->prepare("
+                    UPDATE partidos 
+                    SET goles_local = ?, goles_visitante = ?, observaciones = ?, tiempo_actual = 'finalizado'
+                    WHERE id = ?
+                ");
+                $stmt->execute([$goles_local, $goles_visitante, $observaciones, $partido_id]);
+                
+                // Procesar jugadores
+                $stmt = $db->prepare("DELETE FROM jugadores_partido WHERE partido_id = ?");
+                $stmt->execute([$partido_id]);
+                
+                $numerosLocal = json_decode($_POST['numeros_local'], true);
+                $numerosVisitante = json_decode($_POST['numeros_visitante'], true);
+                
+                $procesarJugadores = function($equipo_id, $numeros_array) use ($db, $partido_id) {
+                    $stmt = $db->prepare("SELECT id FROM jugadores WHERE equipo_id = ? AND activo = 1");
+                    $stmt->execute([$equipo_id]);
+                    $todos_jugadores = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                    
+                    if (empty($numeros_array)) {
+                        foreach ($todos_jugadores as $jug_id) {
+                            $stmt = $db->prepare("INSERT INTO jugadores_partido (partido_id, jugador_id, numero_camiseta) VALUES (?, ?, 0)");
+                            $stmt->execute([$partido_id, $jug_id]);
+                        }
+                    } else {
+                        foreach ($numeros_array as $num) {
+                            if (!empty($num['numero']) && !empty($num['jugador_id'])) {
+                                $stmt = $db->prepare("INSERT INTO jugadores_partido (partido_id, jugador_id, numero_camiseta) VALUES (?, ?, ?)");
+                                $stmt->execute([$partido_id, (int)$num['jugador_id'], (int)$num['numero']]);
+                            }
+                        }
+                    }
+                };
+                
+                $procesarJugadores($partido['equipo_local_id'], $numerosLocal);
+                $procesarJugadores($partido['equipo_visitante_id'], $numerosVisitante);
+                
+                $db->commit();
+                
+                // Obtener formato_id para redirigir
+                $stmt = $db->prepare("
+                    SELECT cf.id as formato_id
+                    FROM fases_eliminatorias fe
+                    JOIN campeonatos_formato cf ON fe.formato_id = cf.id
+                    WHERE fe.id = ?
+                ");
+                $stmt->execute([$partido_info['fase_eliminatoria_id']]);
+                $formato = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($formato) {
+                    $_SESSION['message'] = 'El partido terminó en empate. Debe cargar el resultado de los penales para finalizar.';
+                    header("Location: ../admin/control_eliminatorias.php?formato_id={$formato['formato_id']}&partido_id={$partido_id}&empate=1");
+                    exit;
+                } else {
+                    $_SESSION['error'] = 'Error: No se pudo obtener información del formato';
+                    header("Location: partido_live.php?partido_id={$partido_id}");
+                    exit;
+                }
+            }
             
             $stmt = $db->prepare("
                 UPDATE partidos 
@@ -276,6 +382,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ajax_action'])) {
                     $stmt = $db->prepare("DELETE FROM eventos_partido WHERE partido_id = ? AND jugador_id = ? AND tipo_evento = 'amarilla'");
                     $stmt->execute([$partido_id, $jugador_id]);
                     
+                    // NOTA: El trigger trg_eventos_partido_campeonato determina automáticamente
+                    // el tipo de torneo (largo/zonal) y establece es_torneo_zonal y campeonato_id
                     $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto, observaciones) VALUES (?, ?, 'roja', 0, 'Doble amarilla')");
                     $stmt->execute([$partido_id, $jugador_id]);
                 }
@@ -283,10 +391,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ajax_action'])) {
             
             foreach ($tarjetas_por_jugador as $jugador_id => $stats) {
                 if ($stats['amarillas'] >= 2) {
-                    crearSancionAutomatica($db, $jugador_id, 'doble_amarilla', 1, 'Doble amarilla en partido');
+                    crearSancionAutomatica($db, $jugador_id, 'doble_amarilla', 1, 'Doble amarilla en partido', $partido_id);
                 }
                 if ($stats['rojas'] > 0) {
-                    crearSancionAutomatica($db, $jugador_id, 'roja_directa', 1, 'Tarjeta roja directa');
+                    crearSancionAutomatica($db, $jugador_id, 'roja_directa', 1, 'Tarjeta roja directa', $partido_id);
                 }
             }
             
@@ -313,7 +421,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ajax_action'])) {
                     $amarillas = (int)$stmt->fetchColumn();
                     
                     if ($amarillas >= 4 && $amarillas % 4 == 0) {
-                        crearSancionAutomatica($db, $jugador_id, 'amarillas_acumuladas', 1, '4 amarillas acumuladas');
+                        crearSancionAutomatica($db, $jugador_id, 'amarillas_acumuladas', 1, '4 amarillas acumuladas', $partido_id);
                     }
                 }
             }

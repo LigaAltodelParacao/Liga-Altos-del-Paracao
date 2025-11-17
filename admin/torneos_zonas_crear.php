@@ -1,5 +1,6 @@
 <?php
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/funciones_torneos_zonas.php';
 
 if (!isLoggedIn() || !hasPermission('admin')) {
     redirect('../login.php');
@@ -10,39 +11,45 @@ $db = Database::getInstance()->getConnection();
 $message = '';
 $error = '';
 
-// Obtener campeonatos y categorías
-$campeonatos = $db->query("SELECT * FROM campeonatos WHERE activo=1 ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
+// Obtener solo campeonatos zonales
+$campeonatos = $db->query("
+    SELECT * FROM campeonatos 
+    WHERE activo=1 
+    AND (tipo_campeonato = 'zonal' OR es_torneo_nocturno = 1)
+    ORDER BY nombre
+")->fetchAll(PDO::FETCH_ASSOC);
 
 // AJAX: Obtener categorías por campeonato
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'categorias' && isset($_GET['campeonato_id'])) {
     header('Content-Type: application/json');
-    $stmt = $db->prepare("SELECT * FROM categorias WHERE campeonato_id = ? AND activa = 1 ORDER BY nombre");
-    $stmt->execute([$_GET['campeonato_id']]);
-    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+    try {
+        $campeonato_id = (int)$_GET['campeonato_id'];
+        // La tabla categorias no tiene columna 'nivel', solo id, nombre, campeonato_id, descripcion, activa
+        $stmt = $db->prepare("SELECT id, nombre, campeonato_id FROM categorias WHERE campeonato_id = ? AND activa = 1 ORDER BY nombre");
+        $stmt->execute([$campeonato_id]);
+        $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        echo json_encode(['success' => true, 'data' => $categorias]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
     exit;
 }
 
 // AJAX: Obtener equipos por categoría
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'equipos' && isset($_GET['categoria_id'])) {
     header('Content-Type: application/json');
-    $stmt = $db->prepare("SELECT id, nombre, logo FROM equipos WHERE categoria_id = ? AND activo = 1 ORDER BY nombre");
-    $stmt->execute([$_GET['categoria_id']]);
-    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
-    exit;
-}
-
-// Función para distribuir equipos en zonas automáticamente
-function distribuirEquiposEnZonas($total_equipos, $cantidad_zonas) {
-    $equipos_base = floor($total_equipos / $cantidad_zonas);
-    $equipos_extra = $total_equipos % $cantidad_zonas;
-    
-    $distribucion = [];
-    for ($i = 0; $i < $cantidad_zonas; $i++) {
-        $equipos_en_zona = $equipos_base + ($i < $equipos_extra ? 1 : 0);
-        $distribucion[] = $equipos_en_zona;
+    try {
+        $categoria_id = (int)$_GET['categoria_id'];
+        $stmt = $db->prepare("SELECT id, nombre, logo FROM equipos WHERE categoria_id = ? AND activo = 1 ORDER BY nombre");
+        $stmt->execute([$categoria_id]);
+        $equipos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        echo json_encode(['success' => true, 'data' => $equipos]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
-    
-    return $distribucion;
+    exit;
 }
 
 // Procesar creación de torneo
@@ -55,62 +62,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
         $categoria_id = $_POST['categoria_id'];
         $cantidad_zonas = (int)$_POST['cantidad_zonas'];
         $equipos_seleccionados = $_POST['equipos'] ?? [];
+        $cantidad_equipos = count($equipos_seleccionados);
         
-        if (empty($equipos_seleccionados)) {
-            throw new Exception('Debes seleccionar al menos un equipo para crear el torneo.');
+        // Verificar que el campeonato sea de tipo zonal
+        $stmt = $db->prepare("
+            SELECT tipo_campeonato, es_torneo_nocturno, nombre
+            FROM campeonatos 
+            WHERE id = ?
+        ");
+        $stmt->execute([$campeonato_id]);
+        $campeonato = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$campeonato) {
+            throw new Exception("El campeonato seleccionado no existe");
         }
         
-        $total_equipos = count($equipos_seleccionados);
-        
-        // Calcular distribución automática
-        $distribucion = distribuirEquiposEnZonas($total_equipos, $cantidad_zonas);
-        
-        // Clasificación
-        $primeros = (int)($_POST['primeros'] ?? 1);
-        $segundos = (int)($_POST['segundos'] ?? 0);
-        $terceros = (int)($_POST['terceros'] ?? 0);
-        $cuartos = (int)($_POST['cuartos'] ?? 0);
-        
-        $equipos_clasifican = ($primeros * $cantidad_zonas) + $segundos + $terceros + $cuartos;
-        
-        // Construir tipo de clasificación
-        $tipo_clasificacion_partes = [];
-        if ($primeros > 0) {
-            $tipo_clasificacion_partes[] = "{$primeros}° de cada zona";
+        // Verificar que el campeonato tenga tipo_campeonato definido
+        if (empty($campeonato['tipo_campeonato']) || $campeonato['tipo_campeonato'] === '') {
+            throw new Exception("El campeonato '{$campeonato['nombre']}' no tiene tipo definido. Por favor, edita el campeonato y selecciona si es 'Largo' o 'Zonal'.");
         }
-        if ($segundos > 0) {
-            $tipo_clasificacion_partes[] = "{$segundos} mejores 2°";
-        }
-        if ($terceros > 0) {
-            $tipo_clasificacion_partes[] = "{$terceros} mejores 3°";
-        }
-        if ($cuartos > 0) {
-            $tipo_clasificacion_partes[] = "{$cuartos} mejores 4°";
-        }
-        $tipo_clasificacion = implode(' + ', $tipo_clasificacion_partes);
         
-        // Calcular equipos_por_zona (promedio para referencia)
-        $equipos_por_zona = ceil($total_equipos / $cantidad_zonas);
+        $es_zonal = $campeonato['tipo_campeonato'] === 'zonal' || ($campeonato['es_torneo_nocturno'] ?? 0) == 1;
+        
+        if (!$es_zonal) {
+            throw new Exception("El campeonato '{$campeonato['nombre']}' es de tipo 'largo'. Para crear un torneo por zonas, debes seleccionar un campeonato de tipo 'zonal'. Por favor, edita el campeonato y cambia su tipo a 'Torneo por Zonas'.");
+        }
+        
+        // Asegurar que tipo_campeonato esté correctamente establecido como 'zonal'
+        if ($campeonato['tipo_campeonato'] !== 'zonal') {
+            $stmt = $db->prepare("UPDATE campeonatos SET tipo_campeonato = 'zonal', es_torneo_nocturno = 1 WHERE id = ?");
+            $stmt->execute([$campeonato_id]);
+        }
+        
+        // Configuración de clasificación
+        $segundos_clasifican = (int)($_POST['segundos_clasifican'] ?? 0);
+        $terceros_clasifican = (int)($_POST['terceros_clasifican'] ?? 0);
+        $cuartos_clasifican = (int)($_POST['cuartos_clasifican'] ?? 0);
+        
+        // Los primeros siempre clasifican
+        $primeros_clasifican = $cantidad_zonas;
+        
+        // Validaciones
+        if ($cantidad_equipos < 4) {
+            throw new Exception("Debe seleccionar al menos 4 equipos");
+        }
+        
+        if ($cantidad_zonas < 2) {
+            throw new Exception("Debe haber al menos 2 zonas");
+        }
+        
+        if ($cantidad_zonas > $cantidad_equipos) {
+            throw new Exception("No puede haber más zonas que equipos");
+        }
+        
+        // Calcular distribución automática de equipos
+        $distribucion = calcularDistribucionZonas($cantidad_equipos, $cantidad_zonas);
         
         // Crear formato
         $stmt = $db->prepare("
             INSERT INTO campeonatos_formato 
-            (campeonato_id, categoria_id, tipo_formato, cantidad_zonas, equipos_por_zona, equipos_clasifican, 
-             tipo_clasificacion, primeros_clasifican, segundos_clasifican, terceros_clasifican, cuartos_clasifican,
+            (campeonato_id, categoria_id, tipo_formato, cantidad_zonas, equipos_clasifican,
+             primeros_clasifican, segundos_clasifican, terceros_clasifican, cuartos_clasifican,
              tiene_octavos, tiene_cuartos, tiene_semifinal, tiene_tercer_puesto, activo)
-            VALUES (?, ?, 'mixto', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            VALUES (?, ?, 'mixto', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         ");
+        
+        $total_clasifican = $primeros_clasifican + $segundos_clasifican + $terceros_clasifican + $cuartos_clasifican;
+        
         $stmt->execute([
             $campeonato_id,
             $categoria_id,
             $cantidad_zonas,
-            $equipos_por_zona,
-            $equipos_clasifican,
-            $tipo_clasificacion,
-            $primeros,
-            $segundos,
-            $terceros,
-            $cuartos,
+            $total_clasifican,
+            $primeros_clasifican,
+            $segundos_clasifican,
+            $terceros_clasifican,
+            $cuartos_clasifican,
             isset($_POST['tiene_octavos']) ? 1 : 0,
             isset($_POST['tiene_cuartos']) ? 1 : 0,
             isset($_POST['tiene_semifinal']) ? 1 : 0,
@@ -119,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
         
         $formato_id = $db->lastInsertId();
         
-        // Crear zonas con la cantidad real de equipos
+        // Crear zonas con distribución automática
         $letras_zonas = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
         $zonas_ids = [];
         
@@ -129,66 +156,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
             $zonas_ids[] = $db->lastInsertId();
         }
         
-        // Distribuir equipos en zonas según la distribución calculada
-        shuffle($equipos_seleccionados); // Sorteo aleatorio
+        // Mezclar equipos aleatoriamente para distribución equitativa
+        shuffle($equipos_seleccionados);
         
-        $equipo_index = 0;
-        foreach ($zonas_ids as $zona_idx => $zona_id) {
-            $equipos_en_esta_zona = $distribucion[$zona_idx];
+        // Asignar equipos a zonas según la distribución calculada
+        $idx_equipo = 0;
+        foreach ($distribucion as $idx_zona => $cant_equipos_zona) {
+            $zona_id = $zonas_ids[$idx_zona];
+            $posicion = 1;
             
-            for ($pos = 1; $pos <= $equipos_en_esta_zona; $pos++) {
-                if ($equipo_index >= count($equipos_seleccionados)) break;
-                
-                $equipo_id = $equipos_seleccionados[$equipo_index];
+            for ($i = 0; $i < $cant_equipos_zona && $idx_equipo < $cantidad_equipos; $i++) {
+                $equipo_id = $equipos_seleccionados[$idx_equipo];
                 
                 $stmt = $db->prepare("
                     INSERT INTO equipos_zonas 
                     (zona_id, equipo_id, posicion, puntos, partidos_jugados) 
                     VALUES (?, ?, ?, 0, 0)
                 ");
-                $stmt->execute([$zona_id, $equipo_id, $pos]);
+                $stmt->execute([$zona_id, $equipo_id, $posicion++]);
                 
-                $equipo_index++;
+                $idx_equipo++;
+            }
+            
+            // Generar fixture para esta zona (todos contra todos)
+            $resultado = generarFixtureZona($zona_id, $db);
+            if (!$resultado) {
+                throw new Exception("Error al generar fixture para la zona {$zona['nombre']}");
             }
         }
         
-        // Crear fases eliminatorias (solo estructura, no los partidos)
+        // Crear fases eliminatorias (solo estructura, los partidos se crean después)
         $orden = 1;
         
         if (isset($_POST['tiene_octavos'])) {
-            $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden) VALUES (?, 'octavos', ?)");
+            $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden, activa) VALUES (?, 'octavos', ?, 0)");
             $stmt->execute([$formato_id, $orden++]);
         }
         
         if (isset($_POST['tiene_cuartos'])) {
-            $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden) VALUES (?, 'cuartos', ?)");
+            $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden, activa) VALUES (?, 'cuartos', ?, 0)");
             $stmt->execute([$formato_id, $orden++]);
         }
         
         if (isset($_POST['tiene_semifinal'])) {
-            $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden) VALUES (?, 'semifinal', ?)");
+            $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden, activa) VALUES (?, 'semifinal', ?, 0)");
             $stmt->execute([$formato_id, $orden++]);
         }
         
         if (isset($_POST['tiene_tercer_puesto'])) {
-            $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden) VALUES (?, 'tercer_puesto', ?)");
+            $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden, activa) VALUES (?, 'tercer_puesto', ?, 0)");
             $stmt->execute([$formato_id, $orden++]);
         }
         
         // Final siempre existe
-        $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden) VALUES (?, 'final', ?)");
+        $stmt = $db->prepare("INSERT INTO fases_eliminatorias (formato_id, nombre, orden, activa) VALUES (?, 'final', ?, 0)");
         $stmt->execute([$formato_id, $orden]);
         
         $db->commit();
         
-        header("Location: torneos_zonas.php?msg=created");
-        exit;
+        $message = 'Torneo creado exitosamente con ' . $cantidad_zonas . ' zonas y ' . $cantidad_equipos . ' equipos';
         
     } catch (Exception $e) {
         $db->rollBack();
         $error = 'Error al crear torneo: ' . $e->getMessage();
     }
 }
+
+// Las funciones calcularDistribucionZonas y generarFixtureZona están en funciones_torneos_zonas.php
 ?>
 
 <!DOCTYPE html>
@@ -199,17 +233,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
     <title>Crear Torneo con Zonas</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="../assets/css/style.css" rel="stylesheet">
+    <link href="<?php echo SITE_URL; ?>assets/css/style.css" rel="stylesheet">
+    <style>
+        .preview-zona {
+            background: #e7f3ff;
+            border-left: 4px solid #0d6efd;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 5px;
+            display: inline-block;
+        }
+        .preview-container {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+        .clasificacion-preview {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-success">
         <div class="container-fluid">
-            <a class="navbar-brand" href="../index.php">
+            <a class="navbar-brand" href="<?php echo SITE_URL; ?>">
                 <i class="fas fa-futbol"></i> Fútbol Manager
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="dashboard.php">Dashboard</a>
-                <a class="nav-link" href="../logout.php">Salir</a>
+                <a class="nav-link" href="<?php echo SITE_URL; ?>logout.php">Salir</a>
             </div>
         </div>
     </nav>
@@ -217,23 +275,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
     <div class="container-fluid">
         <div class="row">
             <div class="col-md-3 col-lg-2 p-0">
-                <?php include __DIR__ . '/../include/sidebar.php'; ?>
+                <?php include __DIR__ . '/include/sidebar.php'; ?>
             </div>
 
             <div class="col-md-9 col-lg-10 p-4">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h2><i class="fas fa-plus-circle"></i> Crear Torneo con Zonas</h2>
-                    <a href="torneos_zonas.php" class="btn btn-secondary">
+                    <a href="dashboard.php" class="btn btn-secondary">
                         <i class="fas fa-arrow-left"></i> Volver
                     </a>
                 </div>
 
-                <?php if ($error): ?>
-                    <div class="alert alert-danger alert-dismissible fade show">
-                        <?= htmlspecialchars($error) ?>
+                <?php if ($message): ?>
+                    <div class="alert alert-success alert-dismissible fade show">
+                        <i class="fas fa-check-circle"></i> <?= htmlspecialchars($message) ?>
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 <?php endif; ?>
+
+                <?php if ($error): ?>
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="fas fa-exclamation-triangle"></i> <?= htmlspecialchars($error) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> <strong>Sistema Automático:</strong> 
+                    Solo ingresa la cantidad de zonas y selecciona los equipos. El sistema distribuirá automáticamente los equipos de forma equitativa.
+                    <br>Ejemplo: 17 equipos en 4 zonas = 3 zonas de 4 equipos + 1 zona de 5 equipos.
+                </div>
 
                 <form method="POST" id="form_crear_torneo">
                     <!-- Paso 1: Información Básica -->
@@ -262,107 +333,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
                         </div>
                     </div>
 
-                    <!-- Paso 2: Asignación de Equipos -->
-                    <div class="card mb-4">
-                        <div class="card-header bg-info text-white">
-                            <h5 class="mb-0"><i class="fas fa-users"></i> 2. Seleccionar Equipos Participantes *</h5>
-                        </div>
-                        <div class="card-body">
-                            <p class="text-muted">Selecciona los equipos que participarán en el torneo. La cantidad de equipos determinará la distribución en zonas.</p>
-                            <div class="mb-3">
-                                <button type="button" class="btn btn-sm btn-success" id="seleccionar_todos">
-                                    <i class="fas fa-check-double"></i> Seleccionar Todos
-                                </button>
-                                <button type="button" class="btn btn-sm btn-warning" id="deseleccionar_todos">
-                                    <i class="fas fa-times"></i> Deseleccionar Todos
-                                </button>
-                                <span class="ms-3 badge bg-primary" id="contador_equipos">0 equipos seleccionados</span>
-                            </div>
-                            <div id="equipos_container" class="row">
-                                <div class="col-12 text-center text-muted">
-                                    <i class="fas fa-info-circle"></i> Selecciona primero una categoría
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Paso 3: Configuración de Zonas -->
+                    <!-- Paso 2: Configuración de Zonas -->
                     <div class="card mb-4">
                         <div class="card-header bg-success text-white">
-                            <h5 class="mb-0"><i class="fas fa-layer-group"></i> 3. Configuración de Zonas</h5>
+                            <h5 class="mb-0"><i class="fas fa-layer-group"></i> 2. Configuración de Zonas</h5>
                         </div>
                         <div class="card-body">
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Cantidad de Zonas *</label>
                                     <select name="cantidad_zonas" id="cantidad_zonas" class="form-select" required>
-                                        <option value="2">2 Zonas</option>
-                                        <option value="3">3 Zonas</option>
-                                        <option value="4" selected>4 Zonas</option>
-                                        <option value="5">5 Zonas</option>
-                                        <option value="6">6 Zonas</option>
-                                        <option value="7">7 Zonas</option>
-                                        <option value="8">8 Zonas</option>
+                                        <option value="2">2 Zonas (A, B)</option>
+                                        <option value="3">3 Zonas (A, B, C)</option>
+                                        <option value="4" selected>4 Zonas (A, B, C, D)</option>
+                                        <option value="5">5 Zonas (A-E)</option>
+                                        <option value="6">6 Zonas (A-F)</option>
+                                        <option value="8">8 Zonas (A-H)</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label">Distribución Automática</label>
-                                    <div class="alert alert-info mb-0" id="distribucion_info">
-                                        <i class="fas fa-info-circle"></i> Selecciona equipos y zonas para ver la distribución
-                                    </div>
+                                    <label class="form-label">Equipos Seleccionados</label>
+                                    <input type="text" class="form-control" id="contador_equipos" value="0 equipos" readonly>
+                                    <small class="text-muted">Se distribuirán automáticamente en las zonas</small>
                                 </div>
+                            </div>
+                            
+                            <!-- Vista previa de distribución -->
+                            <div id="preview_distribucion" class="preview-container">
+                                <h6><i class="fas fa-eye"></i> Vista Previa de Distribución:</h6>
+                                <div id="preview_content"></div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Paso 4: Tipo de Clasificación -->
+                    <!-- Paso 3: Clasificación a Eliminatorias -->
                     <div class="card mb-4">
                         <div class="card-header bg-warning text-dark">
-                            <h5 class="mb-0"><i class="fas fa-medal"></i> 4. Clasificación a Fase Eliminatoria</h5>
+                            <h5 class="mb-0"><i class="fas fa-trophy"></i> 3. Configuración de Clasificación</h5>
                         </div>
                         <div class="card-body">
-                            <p class="text-muted">Define qué equipos clasifican a la fase eliminatoria:</p>
+                            <div class="alert alert-primary">
+                                <i class="fas fa-star"></i> Los <strong>primeros de cada zona SIEMPRE clasifican</strong> automáticamente
+                            </div>
                             <div class="row">
-                                <div class="col-md-3 mb-3">
-                                    <label class="form-label">Primeros de cada zona *</label>
-                                    <select name="primeros" id="primeros" class="form-select" required>
-                                        <option value="1" selected>1° de cada zona</option>
-                                        <option value="2">1° y 2° de cada zona</option>
-                                    </select>
-                                    <small class="text-muted">Siempre clasifican</small>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label">¿Cuántos segundos clasifican?</label>
+                                    <input type="number" name="segundos_clasifican" id="segundos_clasifican" 
+                                           class="form-control" min="0" max="8" value="0">
+                                    <small class="text-muted">Segundos puestos que avanzan</small>
                                 </div>
-                                <div class="col-md-3 mb-3">
-                                    <label class="form-label">Mejores Segundos</label>
-                                    <input type="number" name="segundos" id="segundos" class="form-control" min="0" max="8" value="0">
-                                    <small class="text-muted">Ej: 2 mejores 2°</small>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label">¿Cuántos terceros clasifican?</label>
+                                    <input type="number" name="terceros_clasifican" id="terceros_clasifican" 
+                                           class="form-control" min="0" max="8" value="0">
+                                    <small class="text-muted">Terceros puestos que avanzan</small>
                                 </div>
-                                <div class="col-md-3 mb-3">
-                                    <label class="form-label">Mejores Terceros</label>
-                                    <input type="number" name="terceros" id="terceros" class="form-control" min="0" max="8" value="0">
-                                    <small class="text-muted">Ej: 2 mejores 3°</small>
-                                </div>
-                                <div class="col-md-3 mb-3">
-                                    <label class="form-label">Mejores Cuartos</label>
-                                    <input type="number" name="cuartos" id="cuartos" class="form-control" min="0" max="8" value="0">
-                                    <small class="text-muted">Ej: 1 mejor 4°</small>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label">¿Cuántos cuartos clasifican?</label>
+                                    <input type="number" name="cuartos_clasifican" id="cuartos_clasifican" 
+                                           class="form-control" min="0" max="8" value="0">
+                                    <small class="text-muted">Cuartos puestos que avanzan</small>
                                 </div>
                             </div>
-                            <div class="alert alert-success" id="total_clasifican_info">
-                                <i class="fas fa-calculator"></i> <strong>Total equipos que clasifican:</strong> <span id="total_clasifican">0</span>
+                            
+                            <div id="total_clasificados" class="clasificacion-preview">
+                                <h6><i class="fas fa-users"></i> Total de Clasificados:</h6>
+                                <p id="resumen_clasificacion" class="mb-0"></p>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Paso 5: Fases Eliminatorias -->
+                    <!-- Paso 4: Fases Eliminatorias -->
                     <div class="card mb-4">
-                        <div class="card-header bg-danger text-white">
-                            <h5 class="mb-0"><i class="fas fa-trophy"></i> 5. Fases Eliminatorias</h5>
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0"><i class="fas fa-medal"></i> 4. Fases Eliminatorias</h5>
                         </div>
                         <div class="card-body">
-                            <p class="text-muted">Selecciona las fases que tendrá el torneo (sistema bracket de eliminación directa con siembra):</p>
-                            <div class="alert alert-warning">
-                                <i class="fas fa-exclamation-triangle"></i> <strong>Importante:</strong> La fase eliminatoria se ejecutará automáticamente cuando se terminen TODOS los partidos de la fase clasificatoria (zonas).
-                            </div>
+                            <p class="text-muted">Selecciona las fases que tendrá el torneo después de la clasificatoria:</p>
                             <div class="row">
                                 <div class="col-md-3">
                                     <div class="form-check form-switch">
@@ -397,8 +444,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
                                     </div>
                                 </div>
                             </div>
-                            <div class="alert alert-info mt-3">
-                                <i class="fas fa-info-circle"></i> La <strong>Final</strong> se creará automáticamente
+                            <div class="alert alert-warning mt-3">
+                                <i class="fas fa-exclamation-triangle"></i> <strong>Importante:</strong> Los partidos de fase eliminatoria se generarán automáticamente 
+                                cuando TODOS los partidos de la fase clasificatoria estén completados.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Paso 5: Asignación de Equipos -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0"><i class="fas fa-users"></i> 5. Seleccionar Equipos Participantes</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="seleccionarTodos()">
+                                    <i class="fas fa-check-square"></i> Seleccionar Todos
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deseleccionarTodos()">
+                                    <i class="fas fa-square"></i> Deseleccionar Todos
+                                </button>
+                            </div>
+                            <div id="equipos_container" class="row">
+                                <div class="col-12 text-center text-muted py-4">
+                                    <i class="fas fa-info-circle fa-2x mb-2"></i>
+                                    <p>Selecciona primero una categoría para ver los equipos disponibles</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -406,10 +477,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
                     <!-- Botones -->
                     <div class="card">
                         <div class="card-body text-end">
-                            <a href="torneos_zonas.php" class="btn btn-secondary">
+                            <a href="dashboard.php" class="btn btn-secondary btn-lg">
                                 <i class="fas fa-times"></i> Cancelar
                             </a>
-                            <button type="submit" name="crear_torneo" class="btn btn-success btn-lg" id="btn_crear">
+                            <button type="submit" name="crear_torneo" class="btn btn-success btn-lg">
                                 <i class="fas fa-check"></i> Crear Torneo
                             </button>
                         </div>
@@ -421,8 +492,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
     <script>
-        let equiposData = [];
-        
         // Cargar categorías al seleccionar campeonato
         document.getElementById('campeonato_id').addEventListener('change', function() {
             const campeonatoId = this.value;
@@ -431,17 +500,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
             if (!campeonatoId) {
                 categoriaSelect.disabled = true;
                 categoriaSelect.innerHTML = '<option value="">Seleccione un campeonato primero</option>';
+                document.getElementById('equipos_container').innerHTML = '<div class="col-12 text-center text-muted py-4"><i class="fas fa-info-circle fa-2x mb-2"></i><p>Selecciona una categoría</p></div>';
                 return;
             }
             
             fetch(`?ajax=categorias&campeonato_id=${campeonatoId}`)
-                .then(r => r.json())
-                .then(data => {
+                .then(r => {
+                    if (!r.ok) {
+                        throw new Error(`HTTP error! status: ${r.status}`);
+                    }
+                    return r.json();
+                })
+                .then(response => {
+                    if (response.success === false) {
+                        throw new Error(response.error || 'Error desconocido');
+                    }
+                    
+                    const data = response.data || response; // Compatibilidad con ambas respuestas
                     categoriaSelect.innerHTML = '<option value="">Seleccionar...</option>';
-                    data.forEach(cat => {
-                        categoriaSelect.innerHTML += `<option value="${cat.id}">${cat.nombre}</option>`;
-                    });
-                    categoriaSelect.disabled = false;
+                    
+                    if (Array.isArray(data) && data.length > 0) {
+                        data.forEach(cat => {
+                            categoriaSelect.innerHTML += `<option value="${cat.id}">${cat.nombre}</option>`;
+                        });
+                        categoriaSelect.disabled = false;
+                    } else {
+                        categoriaSelect.innerHTML = '<option value="">No hay categorías disponibles</option>';
+                        categoriaSelect.disabled = true;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error al cargar categorías:', error);
+                    categoriaSelect.innerHTML = '<option value="">Error al cargar categorías</option>';
+                    categoriaSelect.disabled = true;
+                    alert('Error al cargar las categorías: ' + error.message);
                 });
         });
 
@@ -451,29 +543,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
             const container = document.getElementById('equipos_container');
             
             if (!categoriaId) {
-                container.innerHTML = '<div class="col-12 text-center text-muted"><i class="fas fa-info-circle"></i> Selecciona una categoría</div>';
-                equiposData = [];
-                actualizarContador();
+                container.innerHTML = '<div class="col-12 text-center text-muted py-4"><i class="fas fa-info-circle fa-2x mb-2"></i><p>Selecciona una categoría</p></div>';
                 return;
             }
             
+            container.innerHTML = '<div class="col-12 text-center"><div class="spinner-border text-primary" role="status"></div></div>';
+            
             fetch(`?ajax=equipos&categoria_id=${categoriaId}`)
-                .then(r => r.json())
-                .then(equipos => {
-                    equiposData = equipos;
+                .then(r => {
+                    if (!r.ok) {
+                        throw new Error(`HTTP error! status: ${r.status}`);
+                    }
+                    return r.json();
+                })
+                .then(response => {
+                    if (response.success === false) {
+                        throw new Error(response.error || 'Error desconocido');
+                    }
                     
-                    if (equipos.length === 0) {
-                        container.innerHTML = '<div class="col-12 text-center text-muted">No hay equipos en esta categoría</div>';
+                    const equipos = response.data || response; // Compatibilidad con ambas respuestas
+                    
+                    if (!Array.isArray(equipos) || equipos.length === 0) {
+                        container.innerHTML = '<div class="col-12 text-center text-muted py-4"><i class="fas fa-exclamation-triangle fa-2x mb-2"></i><p>No hay equipos en esta categoría</p></div>';
                         return;
                     }
                     
                     container.innerHTML = '';
                     equipos.forEach(eq => {
-                        const logo = eq.logo ? `<img src="../uploads/${eq.logo}" width="20" class="me-2">` : '';
+                        const logo = eq.logo ? `<img src="../uploads/${eq.logo}" width="20" class="me-2" style="object-fit: contain;">` : '';
                         container.innerHTML += `
                             <div class="col-md-4 col-lg-3 mb-2">
                                 <div class="form-check">
-                                    <input class="form-check-input equipo-checkbox" type="checkbox" name="equipos[]" value="${eq.id}" id="eq_${eq.id}">
+                                    <input class="form-check-input equipo-checkbox" type="checkbox" 
+                                           name="equipos[]" value="${eq.id}" id="eq_${eq.id}"
+                                           onchange="actualizarPreview()">
                                     <label class="form-check-label" for="eq_${eq.id}">
                                         ${logo}${eq.nombre}
                                     </label>
@@ -481,107 +584,115 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_torneo'])) {
                             </div>
                         `;
                     });
-                    
-                    // Agregar event listeners a los checkboxes
-                    document.querySelectorAll('.equipo-checkbox').forEach(checkbox => {
-                        checkbox.addEventListener('change', function() {
-                            actualizarContador();
-                            calcularDistribucion();
-                        });
-                    });
+                })
+                .catch(error => {
+                    console.error('Error al cargar equipos:', error);
+                    container.innerHTML = '<div class="col-12 text-center text-danger py-4"><i class="fas fa-exclamation-triangle"></i> Error al cargar equipos: ' + error.message + '</div>';
                 });
         });
 
-        // Seleccionar/Deseleccionar todos
-        document.getElementById('seleccionar_todos').addEventListener('click', function() {
-            document.querySelectorAll('.equipo-checkbox').forEach(cb => {
-                cb.checked = true;
-            });
-            actualizarContador();
-            calcularDistribucion();
-        });
-
-        document.getElementById('deseleccionar_todos').addEventListener('click', function() {
-            document.querySelectorAll('.equipo-checkbox').forEach(cb => {
-                cb.checked = false;
-            });
-            actualizarContador();
-            calcularDistribucion();
-        });
-
-        // Actualizar contador de equipos
-        function actualizarContador() {
-            const total = document.querySelectorAll('.equipo-checkbox:checked').length;
-            document.getElementById('contador_equipos').textContent = `${total} equipos seleccionados`;
+        // Actualizar vista previa de distribución
+        function actualizarPreview() {
+            const zonas = parseInt(document.getElementById('cantidad_zonas').value) || 0;
+            const equiposSeleccionados = document.querySelectorAll('.equipo-checkbox:checked').length;
+            
+            document.getElementById('contador_equipos').value = `${equiposSeleccionados} equipos seleccionados`;
+            
+            if (zonas > 0 && equiposSeleccionados >= 4) {
+                const distribucion = calcularDistribucion(equiposSeleccionados, zonas);
+                mostrarPreviewDistribucion(distribucion, zonas);
+                document.getElementById('preview_distribucion').style.display = 'block';
+            } else {
+                document.getElementById('preview_distribucion').style.display = 'none';
+            }
+            
+            actualizarTotalClasificados();
         }
 
         // Calcular distribución automática
-        function calcularDistribucion() {
-            const totalEquipos = document.querySelectorAll('.equipo-checkbox:checked').length;
-            const zonas = parseInt(document.getElementById('cantidad_zonas').value) || 0;
-            const infoDiv = document.getElementById('distribucion_info');
+        function calcularDistribucion(totalEquipos, numZonas) {
+            const equiposPorZona = Math.floor(totalEquipos / numZonas);
+            const sobrantes = totalEquipos % numZonas;
             
-            if (totalEquipos === 0 || zonas === 0) {
-                infoDiv.innerHTML = '<i class="fas fa-info-circle"></i> Selecciona equipos y zonas para ver la distribución';
-                return;
+            const distribucion = [];
+            for (let i = 0; i < numZonas; i++) {
+                distribucion.push(equiposPorZona + (i < sobrantes ? 1 : 0));
             }
-            
-            const equiposBase = Math.floor(totalEquipos / zonas);
-            const equiposExtra = totalEquipos % zonas;
-            
-            let distribucionTexto = '<strong>Distribución automática:</strong><br>';
-            const letras = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-            
-            for (let i = 0; i < zonas; i++) {
-                const equiposEnZona = equiposBase + (i < equiposExtra ? 1 : 0);
-                distribucionTexto += `Zona ${letras[i]}: ${equiposEnZona} equipos<br>`;
-            }
-            
-            infoDiv.innerHTML = distribucionTexto;
-            calcularTotalClasifican();
+            return distribucion;
         }
 
-        // Calcular total de equipos que clasifican
-        function calcularTotalClasifican() {
-            const zonas = parseInt(document.getElementById('cantidad_zonas').value) || 0;
-            const primeros = parseInt(document.getElementById('primeros').value) || 0;
-            const segundos = parseInt(document.getElementById('segundos').value) || 0;
-            const terceros = parseInt(document.getElementById('terceros').value) || 0;
-            const cuartos = parseInt(document.getElementById('cuartos').value) || 0;
+        // Mostrar vista previa
+        function mostrarPreviewDistribucion(distribucion, numZonas) {
+            const letras = 'ABCDEFGH';
+            let html = '';
             
-            const total = (primeros * zonas) + segundos + terceros + cuartos;
-            document.getElementById('total_clasifican').textContent = total;
+            for (let i = 0; i < numZonas; i++) {
+                html += `<div class="preview-zona">
+                    <strong>Zona ${letras[i]}:</strong> ${distribucion[i]} equipos
+                </div>`;
+            }
+            
+            document.getElementById('preview_content').innerHTML = html;
         }
 
-        // Event listeners para calcular clasificados
-        ['cantidad_zonas', 'primeros', 'segundos', 'terceros', 'cuartos'].forEach(id => {
-            document.getElementById(id).addEventListener('change', function() {
-                calcularDistribucion();
-                calcularTotalClasifican();
-            });
-        });
+        // Actualizar total de clasificados
+        function actualizarTotalClasificados() {
+            const zonas = parseInt(document.getElementById('cantidad_zonas').value) || 0;
+            const segundos = parseInt(document.getElementById('segundos_clasifican').value) || 0;
+            const terceros = parseInt(document.getElementById('terceros_clasifican').value) || 0;
+            const cuartos = parseInt(document.getElementById('cuartos_clasifican').value) || 0;
+            
+            const total = zonas + segundos + terceros + cuartos;
+            
+            let resumen = `<strong>${total} equipos clasificarán:</strong><br>`;
+            resumen += `- ${zonas} primeros de zona (automático)<br>`;
+            if (segundos > 0) resumen += `- ${segundos} segundos lugares<br>`;
+            if (terceros > 0) resumen += `- ${terceros} terceros lugares<br>`;
+            if (cuartos > 0) resumen += `- ${cuartos} cuartos lugares`;
+            
+            document.getElementById('resumen_clasificacion').innerHTML = resumen;
+        }
 
-        // Validación antes de enviar
+        // Seleccionar todos los equipos
+        function seleccionarTodos() {
+            document.querySelectorAll('.equipo-checkbox').forEach(cb => cb.checked = true);
+            actualizarPreview();
+        }
+
+        // Deseleccionar todos
+        function deseleccionarTodos() {
+            document.querySelectorAll('.equipo-checkbox').forEach(cb => cb.checked = false);
+            actualizarPreview();
+        }
+
+        // Event listeners para actualizar preview
+        document.getElementById('cantidad_zonas').addEventListener('change', actualizarPreview);
+        document.getElementById('segundos_clasifican').addEventListener('input', actualizarTotalClasificados);
+        document.getElementById('terceros_clasifican').addEventListener('input', actualizarTotalClasificados);
+        document.getElementById('cuartos_clasifican').addEventListener('input', actualizarTotalClasificados);
+
+        // Validación del formulario
         document.getElementById('form_crear_torneo').addEventListener('submit', function(e) {
             const equiposSeleccionados = document.querySelectorAll('.equipo-checkbox:checked').length;
-            
-            if (equiposSeleccionados === 0) {
-                e.preventDefault();
-                alert('Debes seleccionar al menos un equipo para crear el torneo.');
-                return false;
-            }
-            
             const zonas = parseInt(document.getElementById('cantidad_zonas').value);
-            if (equiposSeleccionados < zonas) {
+            
+            if (equiposSeleccionados < 4) {
                 e.preventDefault();
-                alert(`Necesitas al menos ${zonas} equipos para crear ${zonas} zonas.`);
+                alert('Debe seleccionar al menos 4 equipos para crear el torneo');
                 return false;
             }
+            
+            if (zonas > equiposSeleccionados) {
+                e.preventDefault();
+                alert('No puede haber más zonas que equipos seleccionados');
+                return false;
+            }
+            
+            return true;
         });
 
-        // Inicializar cálculos
-        calcularDistribucion();
-        calcularTotalClasifican();
+        // Inicializar
+        actualizarTotalClasificados();
     </script>
 </body>
 </html>
