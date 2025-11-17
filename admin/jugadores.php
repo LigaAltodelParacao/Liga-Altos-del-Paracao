@@ -37,15 +37,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $dni = trim($_POST['dni']);
             $apellido_nombre = trim($_POST['apellido_nombre']);
             $fecha_nacimiento = $_POST['fecha_nacimiento'];
+            $campeonato_id = getCampeonatoIdByEquipo($equipo_id, $db);
             
             if (empty($equipo_id) || empty($dni) || empty($apellido_nombre) || empty($fecha_nacimiento)) {
                 $error = 'Todos los campos son obligatorios';
+            } elseif (!$campeonato_id) {
+                $error = 'No se pudo determinar el campeonato del equipo seleccionado';
             } else {
                 try {
-                    $stmt = $db->prepare("SELECT id FROM jugadores WHERE dni = ?");
-                    $stmt->execute([$dni]);
-                    if ($stmt->fetch()) {
-                        $error = 'Ya existe un jugador con ese DNI';
+                    $existe_en_torneo = jugadorExisteEnCampeonato($dni, $campeonato_id, null, $db);
+                    if ($existe_en_torneo) {
+                        $error = 'Este DNI ya está registrado en este torneo. Solo se permite repetirlo en torneos distintos.';
                     } else {
                         $foto = null;
                         if (isset($_FILES['foto']) && $_FILES['foto']['tmp_name']) {
@@ -60,17 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             $stmt->execute([$equipo_id, $dni, $apellido_nombre, $fecha_nacimiento, $foto]);
 
                             // Registrar historial inicial del jugador en el equipo y campeonato actual
-                            $stmtCamp = $db->prepare("SELECT camp.id AS campeonato_id
-                                                      FROM equipos e
-                                                      JOIN categorias c ON e.categoria_id = c.id
-                                                      JOIN campeonatos camp ON c.campeonato_id = camp.id
-                                                      WHERE e.id = ?");
-                            $stmtCamp->execute([$equipo_id]);
-                            $rowCamp = $stmtCamp->fetch();
-                            if ($rowCamp) {
-                                $stmtHist = $db->prepare("INSERT INTO jugadores_equipos_historial (jugador_dni, jugador_nombre, equipo_id, campeonato_id, fecha_inicio) VALUES (?, ?, ?, ?, CURDATE())");
-                                $stmtHist->execute([$dni, $apellido_nombre, $equipo_id, $rowCamp['campeonato_id']]);
-                            }
+                            $stmtHist = $db->prepare("INSERT INTO jugadores_equipos_historial (jugador_dni, jugador_nombre, equipo_id, campeonato_id, fecha_inicio) VALUES (?, ?, ?, ?, CURDATE())");
+                            $stmtHist->execute([$dni, $apellido_nombre, $equipo_id, $campeonato_id]);
 
                             $message = 'Jugador registrado exitosamente';
                         }
@@ -111,6 +104,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                                   WHERE e.id = ?");
                         $stmtCamp->execute([$equipo_id]);
                         $rowCamp = $stmtCamp->fetch();
+                        if (!$rowCamp) {
+                            throw new Exception('No se pudo determinar el campeonato del equipo seleccionado.');
+                        }
                         for ($row = 2; $row <= $highestRow; $row++) {
                             $apellido_nombre = trim($worksheet->getCell('A'.$row)->getValue());
                             $dni = trim($worksheet->getCell('B'.$row)->getValue());
@@ -130,21 +126,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     }
                                 }
                                 if ($fecha_nacimiento) {
-                                    $stmt = $db->prepare("SELECT id FROM jugadores WHERE dni = ?");
-                                    $stmt->execute([$dni]);
-                                    if (!$stmt->fetch()) {
+                                    $existe_en_torneo = jugadorExisteEnCampeonato($dni, $rowCamp['campeonato_id'], null, $db);
+                                    if (!$existe_en_torneo) {
                                         $stmt = $db->prepare("INSERT INTO jugadores (equipo_id, dni, apellido_nombre, fecha_nacimiento) VALUES (?, ?, ?, ?)");
                                         $stmt->execute([$equipo_id, $dni, $apellido_nombre, $fecha_nacimiento]);
 
                                         // Registrar historial inicial del jugador importado
-                                        if ($rowCamp) {
-                                            $stmtHist = $db->prepare("INSERT INTO jugadores_equipos_historial (jugador_dni, jugador_nombre, equipo_id, campeonato_id, fecha_inicio) VALUES (?, ?, ?, ?, CURDATE())");
-                                            $stmtHist->execute([$dni, $apellido_nombre, $equipo_id, $rowCamp['campeonato_id']]);
-                                        }
+                                        $stmtHist = $db->prepare("INSERT INTO jugadores_equipos_historial (jugador_dni, jugador_nombre, equipo_id, campeonato_id, fecha_inicio) VALUES (?, ?, ?, ?, CURDATE())");
+                                        $stmtHist->execute([$dni, $apellido_nombre, $equipo_id, $rowCamp['campeonato_id']]);
 
                                         $importados++;
                                     } else {
-                                        $errores[] = "DNI $dni ya existe";
+                                        $errores[] = "DNI $dni ya existe en este torneo";
                                     }
                                 } else {
                                     $errores[] = "Fecha inválida para $apellido_nombre (fila $row)";
@@ -174,6 +167,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $apellido_nombre = trim($_POST['apellido_nombre']);
             $fecha_nacimiento = $_POST['fecha_nacimiento'];
             $activo = isset($_POST['activo']) ? 1 : 0;
+            $campeonato_id = getCampeonatoIdByEquipo($equipo_id, $db);
+
+            if (!$campeonato_id) {
+                $error = 'No se pudo determinar el campeonato del equipo seleccionado';
+                break;
+            }
+
+            $conflicto = jugadorExisteEnCampeonato($dni, $campeonato_id, $id, $db);
+            if ($conflicto) {
+                $error = 'Este DNI ya está registrado en este torneo. Solo se puede repetir en torneos distintos.';
+                break;
+            }
+
             try {
                 // Obtener datos actuales para detectar cambio de equipo y mantener DNI anterior
                 $stmtCurr = $db->prepare("SELECT equipo_id, dni, apellido_nombre FROM jugadores WHERE id = ?");

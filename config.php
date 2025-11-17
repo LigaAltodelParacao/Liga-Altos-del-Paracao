@@ -114,6 +114,57 @@ function generateCode($length = 6) {
     return substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'), 0, $length);
 }
 
+// ===================== FUNCIONES DE TORNEOS =====================
+function getCampeonatoIdByEquipo($equipo_id, $db = null) {
+    if (empty($equipo_id)) {
+        return null;
+    }
+
+    $db = $db ?: Database::getInstance()->getConnection();
+    $stmt = $db->prepare("
+        SELECT camp.id
+        FROM equipos e
+        JOIN categorias c ON e.categoria_id = c.id
+        JOIN campeonatos camp ON c.campeonato_id = camp.id
+        WHERE e.id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$equipo_id]);
+    $campeonato_id = $stmt->fetchColumn();
+
+    return $campeonato_id ? (int)$campeonato_id : null;
+}
+
+function jugadorExisteEnCampeonato($dni, $campeonato_id, $excludeJugadorId = null, $db = null) {
+    if (empty($dni) || empty($campeonato_id)) {
+        return false;
+    }
+
+    $db = $db ?: Database::getInstance()->getConnection();
+    $sql = "
+        SELECT j.*
+        FROM jugadores j
+        JOIN equipos e ON j.equipo_id = e.id
+        JOIN categorias c ON e.categoria_id = c.id
+        WHERE j.dni = ?
+          AND c.campeonato_id = ?
+    ";
+    $params = [$dni, $campeonato_id];
+
+    if (!empty($excludeJugadorId)) {
+        $sql .= " AND j.id <> ? ";
+        $params[] = $excludeJugadorId;
+    }
+
+    $sql .= " ORDER BY j.created_at DESC LIMIT 1";
+
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $jugador = $stmt->fetch();
+
+    return $jugador ?: false;
+}
+
 // ===================== SUBIDA DE ARCHIVOS =====================
 function uploadFile($file, $folder = 'general') {
     if (empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) return false;

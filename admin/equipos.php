@@ -75,6 +75,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $stmtCampNuevo = $db->prepare("SELECT camp.id AS campeonato_id FROM categorias c JOIN campeonatos camp ON c.campeonato_id = camp.id WHERE c.id = ?");
                         $stmtCampNuevo->execute([$categoria_id]);
                         $rowCampNuevo = $stmtCampNuevo->fetch();
+                        if (!$rowCampNuevo) {
+                            throw new Exception('No se pudo determinar el campeonato del nuevo equipo.');
+                        }
 
                         // Obtener jugadores del equipo anterior
                         $stmt = $db->prepare("
@@ -88,18 +91,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $jugadores_actualizados = 0;
                         
                         foreach ($jugadores_anteriores as $jugador) {
-                            // Verificar si ya existe un jugador con ese DNI en la tabla general
-                            $stmt_check = $db->prepare("
-                                SELECT id, equipo_id FROM jugadores 
-                                WHERE dni = ?
-                                ORDER BY created_at DESC
-                                LIMIT 1
-                            ");
-                            $stmt_check->execute([$jugador['dni']]);
-                            $jugador_existente = $stmt_check->fetch();
+                            $jugador_existente = jugadorExisteEnCampeonato($jugador['dni'], $rowCampNuevo['campeonato_id'], null, $db);
                             
                             if ($jugador_existente) {
-                                // El jugador ya existe, actualizar su equipo_id al nuevo equipo
+                                if ((int)$jugador_existente['equipo_id'] === (int)$nuevo_equipo_id) {
+                                    continue;
+                                }
+
+                                // El jugador ya existe en este campeonato, actualizar su equipo_id al nuevo equipo
                                 $stmt_update = $db->prepare("
                                     UPDATE jugadores 
                                     SET equipo_id = ?, activo = 1
@@ -109,16 +108,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 $jugadores_actualizados++;
                                 $jugador_id_actual = $jugador_existente['id'];
 
-                                // Cerrar historial abierto en el equipo anterior e insertar nuevo historial
-                                if ($rowCampNuevo) {
-                                    // Cerrar cualquier historial abierto del jugador (por DNI) en su equipo anterior
-                                    $stmtClose = $db->prepare("UPDATE jugadores_equipos_historial SET fecha_fin = CURDATE() WHERE jugador_dni = ? AND fecha_fin IS NULL");
-                                    $stmtClose->execute([$jugador['dni']]);
+                                // Cerrar historial abierto únicamente en el equipo anterior e insertar nuevo historial
+                                $stmtClose = $db->prepare("
+                                    UPDATE jugadores_equipos_historial 
+                                    SET fecha_fin = CURDATE() 
+                                    WHERE jugador_dni = ? AND equipo_id = ? AND fecha_fin IS NULL
+                                ");
+                                $stmtClose->execute([$jugador['dni'], $jugador_existente['equipo_id']]);
 
-                                    // Insertar nuevo historial en el equipo y campeonato actual
-                                    $stmtHist = $db->prepare("INSERT INTO jugadores_equipos_historial (jugador_dni, jugador_nombre, equipo_id, campeonato_id, fecha_inicio) VALUES (?, ?, ?, ?, CURDATE())");
-                                    $stmtHist->execute([$jugador['dni'], $jugador['apellido_nombre'], $nuevo_equipo_id, $rowCampNuevo['campeonato_id']]);
-                                }
+                                $stmtHist = $db->prepare("INSERT INTO jugadores_equipos_historial (jugador_dni, jugador_nombre, equipo_id, campeonato_id, fecha_inicio) VALUES (?, ?, ?, ?, CURDATE())");
+                                $stmtHist->execute([$jugador['dni'], $jugador['apellido_nombre'], $nuevo_equipo_id, $rowCampNuevo['campeonato_id']]);
                             } else {
                                 // El jugador no existe, crear uno nuevo
                                 $stmt_insert = $db->prepare("

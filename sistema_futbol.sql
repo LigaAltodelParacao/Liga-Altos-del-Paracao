@@ -1049,7 +1049,7 @@ ALTER TABLE `horarios_canchas`
 --
 ALTER TABLE `jugadores`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `dni` (`dni`),
+  ADD KEY `idx_jugadores_dni` (`dni`),
   ADD KEY `idx_jugador_equipo` (`equipo_id`);
 
 --
