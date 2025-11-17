@@ -275,6 +275,154 @@ $top_goleadores = $db->query($query_top_goleadores)->fetchAll();
 $query_campeonatos = "SELECT id, nombre FROM campeonatos ORDER BY fecha_inicio DESC";
 $campeonatos = $db->query($query_campeonatos)->fetchAll();
 
+$campeones_por_categoria = [];
+$campeones_por_anio = [];
+
+try {
+    $query_campeones_final = "
+        SELECT 
+            cf.categoria_id,
+            camp.id AS campeonato_id,
+            pe.ganador_id AS equipo_id,
+            e.nombre AS equipo_nombre,
+            e.logo,
+            COALESCE(pe.finalizado_at, pe.fecha_partido, camp.fecha_fin, camp.fecha_inicio) AS orden_fecha
+        FROM partidos_eliminatorios pe
+        JOIN fases_eliminatorias fe ON pe.fase_id = fe.id
+        JOIN campeonatos_formato cf ON fe.formato_id = cf.id
+        JOIN campeonatos camp ON cf.campeonato_id = camp.id
+        JOIN equipos e ON pe.ganador_id = e.id
+        WHERE fe.nombre = 'final'
+          AND pe.estado = 'finalizado'
+          AND pe.ganador_id IS NOT NULL
+        ORDER BY orden_fecha DESC
+    ";
+    $stmtCampeonesFinal = $db->query($query_campeones_final);
+    foreach ($stmtCampeonesFinal as $row) {
+        $key = $row['categoria_id'] . '_' . $row['campeonato_id'];
+        if (!isset($campeones_por_categoria[$key])) {
+            $campeones_por_categoria[$key] = [
+                'equipo_id' => $row['equipo_id'],
+                'equipo_nombre' => $row['equipo_nombre'],
+                'logo' => $row['logo'],
+                'origen' => 'eliminatoria'
+            ];
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error obteniendo campeones de finales: ' . $e->getMessage());
+}
+
+try {
+    $query_tabla_general = "
+        SELECT 
+            c.id AS categoria_id,
+            c.campeonato_id,
+            e.id AS equipo_id,
+            e.nombre AS equipo_nombre,
+            e.logo,
+            COALESCE(SUM(
+                CASE 
+                    WHEN (p.equipo_local_id = e.id AND p.goles_local > p.goles_visitante) OR 
+                         (p.equipo_visitante_id = e.id AND p.goles_visitante > p.goles_local) THEN 3
+                    WHEN p.goles_local = p.goles_visitante AND p.estado = 'finalizado' THEN 1
+                    ELSE 0
+                END
+            ),0) AS puntos,
+            COALESCE(SUM(CASE WHEN p.equipo_local_id = e.id THEN p.goles_local WHEN p.equipo_visitante_id = e.id THEN p.goles_visitante ELSE 0 END),0) AS goles_favor,
+            COALESCE(SUM(CASE WHEN p.equipo_local_id = e.id THEN p.goles_visitante WHEN p.equipo_visitante_id = e.id THEN p.goles_local ELSE 0 END),0) AS goles_contra,
+            COUNT(p.id) AS partidos_jugados
+        FROM equipos e
+        JOIN categorias c ON e.categoria_id = c.id
+        LEFT JOIN partidos p ON (p.equipo_local_id = e.id OR p.equipo_visitante_id = e.id)
+            AND p.estado = 'finalizado'
+            AND (p.tipo_torneo = 'normal' OR p.tipo_torneo IS NULL)
+        GROUP BY e.id, c.id, c.campeonato_id
+    ";
+    $stmtTablaGeneral = $db->query($query_tabla_general);
+    $rankings_por_categoria = [];
+    foreach ($stmtTablaGeneral as $row) {
+        $key = $row['categoria_id'] . '_' . $row['campeonato_id'];
+        $row['puntos'] = (int)$row['puntos'];
+        $row['goles_favor'] = (int)$row['goles_favor'];
+        $row['goles_contra'] = (int)$row['goles_contra'];
+        $row['diferencia_gol'] = $row['goles_favor'] - $row['goles_contra'];
+        $row['partidos_jugados'] = (int)$row['partidos_jugados'];
+        $rankings_por_categoria[$key][] = $row;
+    }
+
+    foreach ($rankings_por_categoria as $key => $equiposCategoria) {
+        if (isset($campeones_por_categoria[$key]) || empty($equiposCategoria)) {
+            continue;
+        }
+        usort($equiposCategoria, function ($a, $b) {
+            if ($a['puntos'] !== $b['puntos']) {
+                return $b['puntos'] <=> $a['puntos'];
+            }
+            if ($a['diferencia_gol'] !== $b['diferencia_gol']) {
+                return $b['diferencia_gol'] <=> $a['diferencia_gol'];
+            }
+            if ($a['goles_favor'] !== $b['goles_favor']) {
+                return $b['goles_favor'] <=> $a['goles_favor'];
+            }
+            return strcasecmp($a['equipo_nombre'], $b['equipo_nombre']);
+        });
+
+        $ganador = $equiposCategoria[0];
+        $tiene_datos = ($ganador['partidos_jugados'] > 0) || ($ganador['puntos'] > 0) || ($ganador['goles_favor'] > 0) || ($ganador['goles_contra'] > 0);
+        if ($tiene_datos) {
+            $campeones_por_categoria[$key] = [
+                'equipo_id' => $ganador['equipo_id'],
+                'equipo_nombre' => $ganador['equipo_nombre'],
+                'logo' => $ganador['logo'],
+                'origen' => 'tabla',
+                'puntos' => $ganador['puntos']
+            ];
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error calculando campeones por tabla: ' . $e->getMessage());
+}
+
+try {
+    $query_categorias_historial = "
+        SELECT 
+            c.id AS categoria_id,
+            c.nombre AS categoria_nombre,
+            camp.id AS campeonato_id,
+            camp.nombre AS campeonato_nombre,
+            YEAR(COALESCE(camp.fecha_fin, camp.fecha_inicio)) AS anio,
+            COALESCE(camp.fecha_fin, camp.fecha_inicio) AS fecha_referencia
+        FROM categorias c
+        JOIN campeonatos camp ON c.campeonato_id = camp.id
+        ORDER BY camp.fecha_inicio DESC, c.nombre ASC
+    ";
+    $stmtCategoriasHistorial = $db->query($query_categorias_historial);
+    $categorias_historial = $stmtCategoriasHistorial->fetchAll();
+
+    foreach ($categorias_historial as $cat) {
+        $key = $cat['categoria_id'] . '_' . $cat['campeonato_id'];
+        if ($campeonato_id !== 0 && $campeonato_id != $cat['campeonato_id']) {
+            continue;
+        }
+        $anio_key = ($cat['anio'] ?? 'Sin año') ?: 'Sin año';
+        if (!isset($campeones_por_anio[$anio_key][$cat['campeonato_id']])) {
+            $campeones_por_anio[$anio_key][$cat['campeonato_id']] = [
+                'campeonato_nombre' => $cat['campeonato_nombre'],
+                'categorias' => []
+            ];
+        }
+        $campeones_por_anio[$anio_key][$cat['campeonato_id']]['categorias'][] = [
+            'categoria_nombre' => $cat['categoria_nombre'],
+            'campeon' => $campeones_por_categoria[$key] ?? null
+        ];
+    }
+    krsort($campeones_por_anio);
+} catch (Exception $e) {
+    error_log('Error armando historial de campeones: ' . $e->getMessage());
+    $campeones_por_anio = [];
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -880,6 +1028,82 @@ $campeonatos = $db->query($query_campeonatos)->fetchAll();
             </div>
         </div>
         <?php endif; ?>
+
+        <div class="stats-container">
+            <h2 class="section-title">
+                <i class="fas fa-flag-checkered"></i> Historial de Campeones
+            </h2>
+            <?php if (empty($campeones_por_anio)): ?>
+                <p class="text-center text-muted py-3 mb-0">
+                    No hay registros de campeones para el filtro seleccionado.
+                </p>
+            <?php else: ?>
+                <?php foreach ($campeones_por_anio as $anio => $campeonatos_list): ?>
+                    <div class="card border-0 shadow-sm mb-3">
+                        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-calendar-alt"></i> Temporada <?php echo htmlspecialchars($anio); ?></span>
+                            <span class="badge bg-light text-dark">
+                                <?php echo count($campeonatos_list); ?> campeonato<?php echo count($campeonatos_list) > 1 ? 's' : ''; ?>
+                            </span>
+                        </div>
+                        <div class="card-body p-0">
+                            <?php foreach ($campeonatos_list as $camp): ?>
+                                <div class="p-3 border-bottom">
+                                    <h5 class="fw-bold mb-3">
+                                        <i class="fas fa-trophy text-success"></i> <?php echo htmlspecialchars($camp['campeonato_nombre']); ?>
+                                    </h5>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm align-middle mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th style="width: 35%;">Categoría</th>
+                                                    <th>Campeón</th>
+                                                    <th class="text-end" style="width: 15%;">Fuente</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($camp['categorias'] as $cat): ?>
+                                                    <tr>
+                                                        <td><?php echo htmlspecialchars($cat['categoria_nombre']); ?></td>
+                                                        <td>
+                                                            <?php if (!empty($cat['campeon'])): ?>
+                                                                <div class="d-flex align-items-center">
+                                                                    <?php if (!empty($cat['campeon']['logo'])): ?>
+                                                                        <img src="../uploads/<?php echo htmlspecialchars($cat['campeon']['logo']); ?>" 
+                                                                             alt="Logo" width="32" height="32" class="rounded-circle me-2" style="object-fit: cover;">
+                                                                    <?php else: ?>
+                                                                        <div class="bg-light rounded-circle me-2 d-flex align-items-center justify-content-center" 
+                                                                             style="width: 32px; height: 32px;">
+                                                                            <i class="fas fa-shield-alt text-muted"></i>
+                                                                        </div>
+                                                                    <?php endif; ?>
+                                                                    <span class="fw-semibold"><?php echo htmlspecialchars($cat['campeon']['equipo_nombre']); ?></span>
+                                                                </div>
+                                                            <?php else: ?>
+                                                                <span class="text-muted"><i class="fas fa-clock"></i> Sin registro</span>
+                                                            <?php endif; ?>
+                                                        </td>
+                                                        <td class="text-end">
+                                                            <?php if (!empty($cat['campeon'])): ?>
+                                                                <span class="badge <?php echo $cat['campeon']['origen'] === 'eliminatoria' ? 'bg-danger' : 'bg-primary'; ?>">
+                                                                    <?php echo $cat['campeon']['origen'] === 'eliminatoria' ? 'Final' : 'Tabla'; ?>
+                                                                </span>
+                                                            <?php else: ?>
+                                                                <span class="badge bg-secondary">Pendiente</span>
+                                                            <?php endif; ?>
+                                                        </td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
 
         <!-- RÉCORDS DE PARTIDOS -->
         <div class="stats-container">

@@ -25,8 +25,8 @@ $stmt = $db->query("
          WHERE z.formato_id = cf.id) as total_equipos
     FROM campeonatos_formato cf
     JOIN campeonatos c ON cf.campeonato_id = c.id
-    JOIN categorias cat ON cat.campeonato_id = c.id
-    WHERE cf.activo = 1
+    LEFT JOIN categorias cat ON cf.categoria_id = cat.id
+    WHERE cf.activo = 1 AND cf.tipo_formato = 'mixto'
     ORDER BY cf.created_at DESC
 ");
 $torneos_zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_torneo'])) {
     <div class="container-fluid">
         <div class="row">
             <div class="col-md-3 col-lg-2 p-0">
-                <?php include __DIR__ . '/include/sidebar.php'; ?>
+                <?php include __DIR__ . '/../include/sidebar.php'; ?>
             </div>
 
             <div class="col-md-9 col-lg-10 p-4">
@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_torneo'])) {
                 <!-- Botón Crear Nuevo Torneo -->
                 <div class="card mb-4">
                     <div class="card-body">
-                        <a href="crear_torneo_zonas.php" class="btn btn-success btn-lg">
+                        <a href="torneos_zonas_crear.php" class="btn btn-success btn-lg">
                             <i class="fas fa-plus-circle"></i> Crear Nuevo Torneo con Zonas
                         </a>
                         <p class="text-muted mt-2 mb-0">

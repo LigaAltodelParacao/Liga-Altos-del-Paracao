@@ -8,6 +8,7 @@
 
 // Incluir las funciones de sanciones
 require_once '../include/sanciones_functions.php';
+require_once __DIR__ . '/funciones_torneos_zonas.php';
 
 // Ejemplo de uso cuando se finaliza un partido:
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['finalizar_partido'])) {
@@ -25,6 +26,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['finalizar_partido'])) 
     // NUEVO: Cumplir automáticamente las sanciones
     if (cumplirSancionesAutomaticas($partido_id, $db)) {
         $message .= ' Las sanciones se actualizaron automáticamente.';
+    }
+
+    $resultado_auto = procesarPostFinalizacionPartido($partido_id, $db);
+    if (!empty($resultado_auto['messages'])) {
+        $message .= ' ' . implode(' ', $resultado_auto['messages']);
     }
 }
 

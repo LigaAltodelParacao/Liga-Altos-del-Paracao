@@ -371,7 +371,7 @@ img,.rounded-circle{width:50px!important;height:50px!important}
         </div>
         <div class="col-9 col-md-5">
           <h5 class="mb-1"><?php echo htmlspecialchars($jugador['apellido_nombre']); ?></h5>
-          <small class="text-muted">DNI: <?php echo htmlspecialchars($jugador['dni']); ?> · Edad: <?php echo calculateAge($jugador['fecha_nacimiento']); ?></small>
+          <small class="text-muted">Edad: <?php echo calculateAge($jugador['fecha_nacimiento']); ?></small>
           <div class="small mt-1">
             <i class="fas fa-shield-alt"></i> Equipo actual: <?php echo htmlspecialchars($jugador['equipo_actual'] ?: 'Sin equipo'); ?>
           </div>

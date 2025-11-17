@@ -1042,7 +1042,6 @@ function mostrarHistorialJugador(jugadorId, categoriaId) {
             let htmlCampeonato = `
                 <div class="card mb-3">
                     <div class="card-body">
-                        <p class="mb-1 small"><strong><i class="fas fa-id-card"></i> DNI:</strong> ${data.jugador.dni}</p>
                         <p class="mb-1 small"><strong><i class="fas fa-birthday-cake"></i> Edad:</strong> ${calculateAge(data.jugador.fecha_nacimiento)} años</p>
                         <p class="mb-0 small"><strong><i class="fas fa-trophy"></i> Campeonato:</strong> ${data.campeonato_actual}</p>
                     </div>

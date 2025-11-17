@@ -9,6 +9,25 @@ $db = Database::getInstance()->getConnection();
 $message = '';
 $error = '';
 
+// Prefiltro: si venimos desde equipos.php con ?equipo=ID, guardamos info para preseleccionar filtros
+$equipo_desde_equipos = isset($_GET['equipo']) ? trim($_GET['equipo']) : '';
+$infoEquipoPref = null;
+if ($equipo_desde_equipos !== '' && ctype_digit($equipo_desde_equipos)) {
+    try {
+        $stmtInfoEq = $db->prepare("
+            SELECT e.id as equipo_id, e.nombre as equipo_nombre, c.id as categoria_id, camp.id as campeonato_id
+            FROM equipos e
+            JOIN categorias c ON e.categoria_id = c.id
+            JOIN campeonatos camp ON c.campeonato_id = camp.id
+            WHERE e.id = ?
+        ");
+        $stmtInfoEq->execute([$equipo_desde_equipos]);
+        $infoEquipoPref = $stmtInfoEq->fetch(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        $infoEquipoPref = null;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $action = $_POST['action'] ?? '';
     
@@ -18,15 +37,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $dni = trim($_POST['dni']);
             $apellido_nombre = trim($_POST['apellido_nombre']);
             $fecha_nacimiento = $_POST['fecha_nacimiento'];
+            $campeonato_id = getCampeonatoIdByEquipo($equipo_id, $db);
             
             if (empty($equipo_id) || empty($dni) || empty($apellido_nombre) || empty($fecha_nacimiento)) {
                 $error = 'Todos los campos son obligatorios';
+            } elseif (!$campeonato_id) {
+                $error = 'No se pudo determinar el campeonato del equipo seleccionado';
             } else {
                 try {
-                    $stmt = $db->prepare("SELECT id FROM jugadores WHERE dni = ?");
-                    $stmt->execute([$dni]);
-                    if ($stmt->fetch()) {
-                        $error = 'Ya existe un jugador con ese DNI';
+                    $existe_en_torneo = jugadorExisteEnCampeonato($dni, $campeonato_id, null, $db);
+                    if ($existe_en_torneo) {
+                        $error = 'Este DNI ya está registrado en este torneo. Solo se permite repetirlo en torneos distintos.';
                     } else {
                         $foto = null;
                         if (isset($_FILES['foto']) && $_FILES['foto']['tmp_name']) {
@@ -41,17 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             $stmt->execute([$equipo_id, $dni, $apellido_nombre, $fecha_nacimiento, $foto]);
 
                             // Registrar historial inicial del jugador en el equipo y campeonato actual
-                            $stmtCamp = $db->prepare("SELECT camp.id AS campeonato_id
-                                                      FROM equipos e
-                                                      JOIN categorias c ON e.categoria_id = c.id
-                                                      JOIN campeonatos camp ON c.campeonato_id = camp.id
-                                                      WHERE e.id = ?");
-                            $stmtCamp->execute([$equipo_id]);
-                            $rowCamp = $stmtCamp->fetch();
-                            if ($rowCamp) {
-                                $stmtHist = $db->prepare("INSERT INTO jugadores_equipos_historial (jugador_dni, jugador_nombre, equipo_id, campeonato_id, fecha_inicio) VALUES (?, ?, ?, ?, CURDATE())");
-                                $stmtHist->execute([$dni, $apellido_nombre, $equipo_id, $rowCamp['campeonato_id']]);
-                            }
+                            $stmtHist = $db->prepare("INSERT INTO jugadores_equipos_historial (jugador_dni, jugador_nombre, equipo_id, campeonato_id, fecha_inicio) VALUES (?, ?, ?, ?, CURDATE())");
+                            $stmtHist->execute([$dni, $apellido_nombre, $equipo_id, $campeonato_id]);
 
                             $message = 'Jugador registrado exitosamente';
                         }
@@ -92,6 +104,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                                   WHERE e.id = ?");
                         $stmtCamp->execute([$equipo_id]);
                         $rowCamp = $stmtCamp->fetch();
+                        if (!$rowCamp) {
+                            throw new Exception('No se pudo determinar el campeonato del equipo seleccionado.');
+                        }
                         for ($row = 2; $row <= $highestRow; $row++) {
                             $apellido_nombre = trim($worksheet->getCell('A'.$row)->getValue());
                             $dni = trim($worksheet->getCell('B'.$row)->getValue());
@@ -111,21 +126,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     }
                                 }
                                 if ($fecha_nacimiento) {
-                                    $stmt = $db->prepare("SELECT id FROM jugadores WHERE dni = ?");
-                                    $stmt->execute([$dni]);
-                                    if (!$stmt->fetch()) {
+                                    $existe_en_torneo = jugadorExisteEnCampeonato($dni, $rowCamp['campeonato_id'], null, $db);
+                                    if (!$existe_en_torneo) {
                                         $stmt = $db->prepare("INSERT INTO jugadores (equipo_id, dni, apellido_nombre, fecha_nacimiento) VALUES (?, ?, ?, ?)");
                                         $stmt->execute([$equipo_id, $dni, $apellido_nombre, $fecha_nacimiento]);
 
                                         // Registrar historial inicial del jugador importado
-                                        if ($rowCamp) {
-                                            $stmtHist = $db->prepare("INSERT INTO jugadores_equipos_historial (jugador_dni, jugador_nombre, equipo_id, campeonato_id, fecha_inicio) VALUES (?, ?, ?, ?, CURDATE())");
-                                            $stmtHist->execute([$dni, $apellido_nombre, $equipo_id, $rowCamp['campeonato_id']]);
-                                        }
+                                        $stmtHist = $db->prepare("INSERT INTO jugadores_equipos_historial (jugador_dni, jugador_nombre, equipo_id, campeonato_id, fecha_inicio) VALUES (?, ?, ?, ?, CURDATE())");
+                                        $stmtHist->execute([$dni, $apellido_nombre, $equipo_id, $rowCamp['campeonato_id']]);
 
                                         $importados++;
                                     } else {
-                                        $errores[] = "DNI $dni ya existe";
+                                        $errores[] = "DNI $dni ya existe en este torneo";
                                     }
                                 } else {
                                     $errores[] = "Fecha inválida para $apellido_nombre (fila $row)";
@@ -155,6 +167,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $apellido_nombre = trim($_POST['apellido_nombre']);
             $fecha_nacimiento = $_POST['fecha_nacimiento'];
             $activo = isset($_POST['activo']) ? 1 : 0;
+            $campeonato_id = getCampeonatoIdByEquipo($equipo_id, $db);
+
+            if (!$campeonato_id) {
+                $error = 'No se pudo determinar el campeonato del equipo seleccionado';
+                break;
+            }
+
+            $conflicto = jugadorExisteEnCampeonato($dni, $campeonato_id, $id, $db);
+            if ($conflicto) {
+                $error = 'Este DNI ya está registrado en este torneo. Solo se puede repetir en torneos distintos.';
+                break;
+            }
+
             try {
                 // Obtener datos actuales para detectar cambio de equipo y mantener DNI anterior
                 $stmtCurr = $db->prepare("SELECT equipo_id, dni, apellido_nombre FROM jugadores WHERE id = ?");
@@ -215,6 +240,14 @@ $campeonatos = $stmt->fetchAll();
 $campeonato_filtro = $_GET['campeonato'] ?? '';
 $categoria_filtro = $_GET['categoria'] ?? '';
 $categorias = [];
+
+// Completar filtros por defecto desde equipo si aplica
+if (empty($campeonato_filtro) && !empty($infoEquipoPref['campeonato_id'])) {
+    $campeonato_filtro = (string)$infoEquipoPref['campeonato_id'];
+}
+if (empty($categoria_filtro) && !empty($infoEquipoPref['categoria_id'])) {
+    $categoria_filtro = (string)$infoEquipoPref['categoria_id'];
+}
 if ($campeonato_filtro) {
     $stmt = $db->prepare("SELECT id, nombre FROM categorias WHERE campeonato_id = ? AND activa = 1 ORDER BY nombre");
     $stmt->execute([$campeonato_filtro]);
@@ -241,6 +274,11 @@ $equipos = $stmt->fetchAll();
 
 $equipo_filtro = $_GET['equipo'] ?? '';
 $buscar = $_GET['buscar'] ?? '';
+
+// Completar equipo por defecto desde equipos.php si corresponde
+if (empty($equipo_filtro) && !empty($infoEquipoPref['equipo_id'])) {
+    $equipo_filtro = (string)$infoEquipoPref['equipo_id'];
+}
 
 $sql = "SELECT j.*, e.nombre as equipo, c.nombre as categoria, camp.nombre as campeonato,
         (SELECT COUNT(*) FROM eventos_partido ep WHERE ep.jugador_id = j.id AND ep.tipo_evento = 'gol') as goles,
@@ -597,6 +635,32 @@ if (!function_exists('calculateAge')) {
                     <input type="hidden" name="action" value="import_excel">
                     
                     <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Campeonato</label>
+                                    <select class="form-select" id="campeonatoImportSelect" onchange="cargarCategoriasImport()">
+                                        <option value="">Seleccionar campeonato...</option>
+                                        <?php foreach ($campeonatos as $camp): ?>
+                                            <option value="<?php echo $camp['id']; ?>"><?php echo htmlspecialchars($camp['nombre']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Categoría</label>
+                                    <select class="form-select" id="categoriaImportSelect" onchange="cargarEquiposImport()">
+                                        <option value="">Seleccionar categoría...</option>
+                                        <?php if (!empty($categorias)): ?>
+                                            <?php foreach ($categorias as $cat): ?>
+                                                <option value="<?php echo $cat['id']; ?>"><?php echo htmlspecialchars($cat['nombre']); ?></option>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
                         <div class="mb-3">
                             <label for="equipo_import" class="form-label">Equipo de Destino *</label>
                             <select class="form-select" id="equipo_import" name="equipo_id" required>
@@ -820,6 +884,66 @@ if (!function_exists('calculateAge')) {
             document.getElementById('btnImportar').disabled = false;
             document.getElementById('btnImportar').innerHTML = '<i class="fas fa-upload"></i> Importar';
         });
+    </script>
+    <script>
+        // Auto abrir modal y preseleccionar equipo si venimos desde equipos.php y no hay jugadores
+        (function() {
+            const params = new URLSearchParams(window.location.search);
+            const equipoParam = params.get('equipo');
+            const jugadoresCount = <?php echo isset($jugadores) ? count($jugadores) : 0; ?>;
+            if (equipoParam && jugadoresCount === 0) {
+                const selNuevo = document.getElementById('equipo_id');
+                const selImport = document.getElementById('equipo_import');
+                if (selNuevo) selNuevo.value = equipoParam;
+                if (selImport) selImport.value = equipoParam;
+                const modal = new bootstrap.Modal(document.getElementById('modalJugador'));
+                modal.show();
+            }
+        })();
+
+        // Selects dependientes para importar (campeonato -> categoría -> equipo)
+        function cargarCategoriasImport() {
+            const campeonatoId = document.getElementById('campeonatoImportSelect').value;
+            const categoriaSelect = document.getElementById('categoriaImportSelect');
+            const equipoSelect = document.getElementById('equipo_import');
+            categoriaSelect.innerHTML = '<option value=\"\">Seleccionar categoría...</option>';
+            equipoSelect.innerHTML = '<option value=\"\">Seleccionar equipo...</option>';
+            if (campeonatoId) {
+                fetch(`ajax/get_categorias.php?campeonato_id=${campeonatoId}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success && data.categorias) {
+                            data.categorias.forEach(cat => {
+                                const opt = document.createElement('option');
+                                opt.value = cat.id;
+                                opt.textContent = cat.nombre;
+                                categoriaSelect.appendChild(opt);
+                            });
+                        }
+                    })
+                    .catch(() => alert('Error al cargar categorías'));
+            }
+        }
+        function cargarEquiposImport() {
+            const categoriaId = document.getElementById('categoriaImportSelect').value;
+            const equipoSelect = document.getElementById('equipo_import');
+            equipoSelect.innerHTML = '<option value=\"\">Seleccionar equipo...</option>';
+            if (categoriaId) {
+                fetch(`ajax/get_equipos.php?categoria_id=${categoriaId}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success && data.equipos) {
+                            data.equipos.forEach(eq => {
+                                const opt = document.createElement('option');
+                                opt.value = eq.id;
+                                opt.textContent = eq.nombre;
+                                equipoSelect.appendChild(opt);
+                            });
+                        }
+                    })
+                    .catch(() => alert('Error al cargar equipos'));
+            }
+        }
     </script>
 </body>
 </html>

@@ -4,12 +4,20 @@
  * ==========================================================
  * 
  * Criterios de desempate cuando dos o más equipos empatan en puntos:
- * 1. Diferencia de goles (GF - GC)
- * 2. Mayor cantidad de goles a favor
- * 3. Mayor cantidad de puntos obtenidos en los enfrentamientos entre los equipos empatados
- * 4. Mayor diferencia de goles entre esos equipos
- * 5. Mayor cantidad de goles a favor entre esos equipos
- * 6. Fairplay (menos tarjetas)
+ * (a) Diferencia de goles (GF - GC)
+ * (b) Goles a favor
+ * (c) Resultados entre sí (duelos directos):
+ *     - Puntos obtenidos entre sí
+ *     - Diferencia de goles entre sí
+ *     - Goles a favor entre sí
+ *     - Goles de visitante entre sí (si aplica)
+ * (d) Más victorias
+ * (e) Fair Play (puntaje disciplinario):
+ *     - Amarilla = 1 punto
+ *     - Doble amarilla = 3 puntos
+ *     - Roja directa = 5 puntos
+ *     - El equipo con menos puntos disciplinarios queda arriba
+ * (f) Sorteo (resolución manual por administrador)
  */
 
 /**
@@ -31,12 +39,21 @@ function calcularTablaPosicionesConDesempate($zona_id, $db) {
             ez.goles_contra,
             ez.diferencia_gol,
             COALESCE((
-                SELECT COUNT(*) + (SUM(CASE WHEN ep.tipo_evento = 'roja' THEN 2 ELSE 0 END))
+                SELECT 
+                    SUM(CASE WHEN ep.tipo_evento = 'amarilla' THEN 1 ELSE 0 END) * 1 +
+                    SUM(CASE 
+                        WHEN ep.tipo_evento = 'roja' AND (ep.observaciones LIKE '%doble%amarilla%' OR ep.observaciones LIKE '%doble amarilla%') 
+                        THEN 3 
+                        WHEN ep.tipo_evento = 'roja' AND (ep.observaciones NOT LIKE '%doble%amarilla%' OR ep.observaciones IS NULL)
+                        THEN 5
+                        ELSE 0
+                    END)
                 FROM eventos_partido ep
                 INNER JOIN jugadores j ON ep.jugador_id = j.id
-                INNER JOIN partidos_zona pz ON ep.partido_id = pz.id
+                INNER JOIN partidos p ON ep.partido_id = p.id
                 WHERE j.equipo_id = e.id 
-                AND pz.zona_id = :zona_id_fp
+                AND p.zona_id = :zona_id_fp
+                AND p.tipo_torneo = 'zona'
                 AND ep.tipo_evento IN ('amarilla', 'roja')
             ), 0) as puntos_fairplay
         FROM equipos e
@@ -185,7 +202,8 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
             'puntos' => 0,
             'gf' => 0,
             'gc' => 0,
-            'dif' => 0
+            'dif' => 0,
+            'goles_visitante' => 0  // Goles anotados como visitante en enfrentamientos directos
         ];
     }
     
@@ -200,6 +218,9 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
         $stats_directos[$local_id]['gc'] += $goles_visitante;
         $stats_directos[$visitante_id]['gf'] += $goles_visitante;
         $stats_directos[$visitante_id]['gc'] += $goles_local;
+        
+        // Actualizar goles de visitante (solo para el equipo visitante)
+        $stats_directos[$visitante_id]['goles_visitante'] += $goles_visitante;
         
         // Asignar puntos
         if ($goles_local > $goles_visitante) {
@@ -224,25 +245,37 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
     }
     unset($equipo); // Romper la referencia
     
-    // Ordenar por criterios 3, 4, 5 y 6
+    // Ordenar por criterios según especificaciones:
+    // (c) Resultados entre sí: Puntos, Diferencia, Goles a favor, Goles de visitante
+    // (d) Más victorias
+    // (e) Fair Play
+    // (f) Sorteo (si todos empatan)
     usort($grupo, function($a, $b) {
-        // Criterio 3: Puntos en enfrentamientos directos
+        // Criterio (c.1): Puntos en enfrentamientos directos
         $puntos_cmp = $b['stats_directos']['puntos'] - $a['stats_directos']['puntos'];
         if ($puntos_cmp != 0) return $puntos_cmp;
         
-        // Criterio 4: Diferencia de goles en enfrentamientos directos
+        // Criterio (c.2): Diferencia de goles en enfrentamientos directos
         $dif_cmp = $b['stats_directos']['dif'] - $a['stats_directos']['dif'];
         if ($dif_cmp != 0) return $dif_cmp;
         
-        // Criterio 5: Goles a favor en enfrentamientos directos
+        // Criterio (c.3): Goles a favor en enfrentamientos directos
         $gf_cmp = $b['stats_directos']['gf'] - $a['stats_directos']['gf'];
         if ($gf_cmp != 0) return $gf_cmp;
         
-        // Criterio 6: Fairplay (menos puntos es mejor)
+        // Criterio (c.4): Goles de visitante en enfrentamientos directos
+        $gv_cmp = $b['stats_directos']['goles_visitante'] - $a['stats_directos']['goles_visitante'];
+        if ($gv_cmp != 0) return $gv_cmp;
+        
+        // Criterio (d): Más victorias (partidos ganados)
+        $victorias_cmp = $b['partidos_ganados'] - $a['partidos_ganados'];
+        if ($victorias_cmp != 0) return $victorias_cmp;
+        
+        // Criterio (e): Fairplay (menos puntos es mejor)
         $fairplay_cmp = $a['puntos_fairplay'] - $b['puntos_fairplay'];
         if ($fairplay_cmp != 0) return $fairplay_cmp;
         
-        // Si todos los criterios están empatados, retornar 0 (empate total)
+        // Si todos los criterios están empatados, retornar 0 (empate total - requiere sorteo)
         return 0;
     });
     
@@ -256,16 +289,18 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
         $equipo_siguiente = $grupo[$i];
         
         // Comparar todos los criterios de desempate
-        $stats_actual = $equipo_actual['stats_directos'] ?? ['puntos' => 0, 'dif' => 0, 'gf' => 0];
-        $stats_siguiente = $equipo_siguiente['stats_directos'] ?? ['puntos' => 0, 'dif' => 0, 'gf' => 0];
+        $stats_actual = $equipo_actual['stats_directos'] ?? ['puntos' => 0, 'dif' => 0, 'gf' => 0, 'goles_visitante' => 0];
+        $stats_siguiente = $equipo_siguiente['stats_directos'] ?? ['puntos' => 0, 'dif' => 0, 'gf' => 0, 'goles_visitante' => 0];
         
         $mismo_puntos_directos = ($stats_actual['puntos'] ?? 0) == ($stats_siguiente['puntos'] ?? 0);
         $misma_dif_directos = ($stats_actual['dif'] ?? 0) == ($stats_siguiente['dif'] ?? 0);
         $mismo_gf_directos = ($stats_actual['gf'] ?? 0) == ($stats_siguiente['gf'] ?? 0);
+        $mismo_gv_directos = ($stats_actual['goles_visitante'] ?? 0) == ($stats_siguiente['goles_visitante'] ?? 0);
+        $mismas_victorias = ($equipo_actual['partidos_ganados'] ?? 0) == ($equipo_siguiente['partidos_ganados'] ?? 0);
         $mismo_fairplay = ($equipo_actual['puntos_fairplay'] ?? 0) == ($equipo_siguiente['puntos_fairplay'] ?? 0);
         
         // Si están empatados en todos los criterios, agregar al grupo actual
-        if ($mismo_puntos_directos && $misma_dif_directos && $mismo_gf_directos && $mismo_fairplay) {
+        if ($mismo_puntos_directos && $misma_dif_directos && $mismo_gf_directos && $mismo_gv_directos && $mismas_victorias && $mismo_fairplay) {
             $grupo_actual[] = $equipo_siguiente;
         } else {
             // Si hay empate en el grupo actual, guardarlo
@@ -476,12 +511,17 @@ function detectarEmpatesRestantes($equipos) {
             $equipo_siguiente = $equipos[$i + 1];
             
             // Comparar todos los criterios
-            $mismo_puntos_directos = ($equipo_actual['stats_directos']['puntos'] ?? 0) == ($equipo_siguiente['stats_directos']['puntos'] ?? 0);
-            $misma_dif_directos = ($equipo_actual['stats_directos']['dif'] ?? 0) == ($equipo_siguiente['stats_directos']['dif'] ?? 0);
-            $mismo_gf_directos = ($equipo_actual['stats_directos']['gf'] ?? 0) == ($equipo_siguiente['stats_directos']['gf'] ?? 0);
+            $stats_actual = $equipo_actual['stats_directos'] ?? ['puntos' => 0, 'dif' => 0, 'gf' => 0, 'goles_visitante' => 0];
+            $stats_siguiente = $equipo_siguiente['stats_directos'] ?? ['puntos' => 0, 'dif' => 0, 'gf' => 0, 'goles_visitante' => 0];
+            
+            $mismo_puntos_directos = ($stats_actual['puntos'] ?? 0) == ($stats_siguiente['puntos'] ?? 0);
+            $misma_dif_directos = ($stats_actual['dif'] ?? 0) == ($stats_siguiente['dif'] ?? 0);
+            $mismo_gf_directos = ($stats_actual['gf'] ?? 0) == ($stats_siguiente['gf'] ?? 0);
+            $mismo_gv_directos = ($stats_actual['goles_visitante'] ?? 0) == ($stats_siguiente['goles_visitante'] ?? 0);
+            $mismas_victorias = ($equipo_actual['partidos_ganados'] ?? 0) == ($equipo_siguiente['partidos_ganados'] ?? 0);
             $mismo_fairplay = ($equipo_actual['puntos_fairplay'] ?? 0) == ($equipo_siguiente['puntos_fairplay'] ?? 0);
             
-            if (!($mismo_puntos_directos && $misma_dif_directos && $mismo_gf_directos && $mismo_fairplay)) {
+            if (!($mismo_puntos_directos && $misma_dif_directos && $mismo_gf_directos && $mismo_gv_directos && $mismas_victorias && $mismo_fairplay)) {
                 if (count($grupo_actual) > 1) {
                     $empates[] = $grupo_actual;
                 }

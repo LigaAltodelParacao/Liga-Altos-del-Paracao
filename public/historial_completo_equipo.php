@@ -590,7 +590,6 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
                                     <thead class="table-light">
                                         <tr>
                                             <th>Jugador</th>
-                                            <th class="d-none-mobile">DNI</th>
                                             <th class="hide-xs">Edad</th>
                                             <th>Torneos</th>
                                         </tr>
@@ -617,7 +616,8 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
                                                 }
                                             }
                                         }
-                                        foreach ($jugadores_agrupados as $jugador): 
+                                        foreach ($jugadores_agrupados as $idx => $jugador): 
+                                            $toggleKey = 'jug-' . md5(($jugador['info']['id'] ?? $idx) . '-' . $idx);
                                         ?>
                                             <tr>
                                                 <td>
@@ -627,15 +627,14 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
                                                     <?php endif; ?>
                                                     <?php echo htmlspecialchars($jugador['info']['apellido_nombre']); ?>
                                                 </td>
-                                                <td class="d-none-mobile"><?php echo htmlspecialchars($jugador['info']['dni']); ?></td>
                                                 <td class="hide-xs"><?php echo calculateAge($jugador['info']['fecha_nacimiento']); ?></td>
                                                 <td>
                                                     <span class="badge bg-info"><?php echo count($jugador['torneos']); ?></span>
                                                     <button class="btn btn-sm btn-outline-secondary py-0 px-1" 
-                                                            onclick="toggleTorneos('<?php echo $jugador['info']['dni']; ?>')">
+                                                            onclick="toggleTorneos('<?php echo $toggleKey; ?>')">
                                                         <i class="fas fa-info-circle"></i>
                                                     </button>
-                                                    <div id="torneos-<?php echo $jugador['info']['dni']; ?>" style="display:none;" class="mt-1 small">
+                                                    <div id="torneos-<?php echo $toggleKey; ?>" style="display:none;" class="mt-1 small">
                                                         <ul class="mb-0">
                                                             <?php foreach ($jugador['torneos'] as $t): ?>
                                                                 <li><?php echo htmlspecialchars($t); ?></li>
@@ -663,8 +662,9 @@ $max_goleador = $stmt->fetch(PDO::FETCH_ASSOC);
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
     <script>
-        function toggleTorneos(dni) {
-            const div = document.getElementById('torneos-' + dni);
+        function toggleTorneos(key) {
+            const div = document.getElementById('torneos-' + key);
+            if (!div) return;
             div.style.display = div.style.display === 'none' ? 'block' : 'none';
         }
     </script>

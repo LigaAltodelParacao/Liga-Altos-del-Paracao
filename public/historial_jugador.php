@@ -281,13 +281,10 @@ function calculateAge($birthDate) {
                 <div class="col-md-10">
                     <h1 class="mb-2"><?php echo htmlspecialchars($jugador['apellido_nombre']); ?></h1>
                     <div class="row">
-                        <div class="col-md-3">
-                            <p class="mb-1"><i class="fas fa-id-card"></i> DNI: <?php echo htmlspecialchars($jugador['dni']); ?></p>
-                        </div>
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <p class="mb-1"><i class="fas fa-birthday-cake"></i> Edad: <?php echo calculateAge($jugador['fecha_nacimiento']); ?> años</p>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-8">
                             <p class="mb-1">
                                 <i class="fas fa-shield-alt"></i> 
                                 <strong>Equipo Actual:</strong> 

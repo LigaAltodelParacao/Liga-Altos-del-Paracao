@@ -245,89 +245,478 @@ if ($categoria_id && !empty($fairplay)) {
             font-size: 0.9rem;
         }
         
-        /* Estilos móviles */
+        /* Estilos móviles para tablas */
         @media (max-width: 768px) {
             .container {
-                padding-left: 10px;
-                padding-right: 10px;
+                padding-left: 4px;
+                padding-right: 4px;
             }
             
             h2 {
                 font-size: 1.5rem;
             }
             
-            .tabla-fairplay {
-                font-size: 0.8rem;
+            .card-body {
+                padding: 0.5rem;
+            }
+            
+            /* Tabla responsive compacta - mostrar TODAS las columnas */
+            .table-responsive {
+                font-size: 0.55rem;
+                margin-left: -8px;
+                margin-right: -8px;
+                padding: 0;
+            }
+            
+            /* Card de tabla sin padding en móviles para maximizar espacio */
+            .card-tabla-fairplay .card-body {
+                padding: 0 !important;
+            }
+            
+            .card-tabla-fairplay .table-responsive {
+                margin: 0;
+                padding: 0;
+            }
+            
+            .table thead th {
+                padding: 0.3rem 0.15rem;
+                font-size: 0.55rem;
+                white-space: nowrap;
+                line-height: 1.2;
+            }
+            
+            .table tbody td {
+                padding: 0.3rem 0.15rem;
+                font-size: 0.55rem;
             }
             
             .table th, .table td {
-                padding: 0.5rem 0.3rem;
-                font-size: 0.8rem;
+                vertical-align: middle;
             }
             
-            .table th.d-none-mobile,
-            .table td.d-none-mobile {
-                display: none;
-            }
-            
-            .table th.hide-xs,
-            .table td.hide-xs {
-                display: none;
-            }
-            
+            /* Logos más pequeños en móviles */
             .table img {
-                width: 25px !important;
-                height: 25px !important;
+                width: 16px !important;
+                height: 16px !important;
+            }
+            
+            /* Ajustar badges y números */
+            .badge {
+                font-size: 0.5rem;
+                padding: 0.1rem 0.2rem;
+                line-height: 1;
+                min-width: 18px;
+                display: inline-block;
+                text-align: center;
             }
             
             .fairplay-badge {
-                width: 35px;
-                height: 35px;
-                font-size: 1rem;
+                width: 22px;
+                height: 22px;
+                font-size: 0.65rem;
+            }
+            
+            /* Cards más compactos */
+            .card {
+                margin-bottom: 1rem;
+            }
+            
+            .card-header {
+                padding: 0.5rem;
+                font-size: 0.75rem;
+            }
+            
+            /* Selector de categoría */
+            .col-md-3, .col-md-4, .col-6 {
+                margin-bottom: 0.5rem;
+            }
+            
+            h5 {
+                font-size: 0.9rem;
+            }
+            
+            /* Leyenda más compacta */
+            .card-body small {
+                font-size: 0.65rem;
+            }
+            
+            /* Equipo name más pequeño */
+            .table td strong {
+                font-size: 0.55rem;
             }
             
             .podio-card {
-                padding: 15px;
-                margin-bottom: 15px;
-            }
-            
-            .col-md-3, .col-md-4, .col-6 {
-                margin-bottom: 0.75rem;
+                padding: 12px;
+                margin-bottom: 12px;
             }
             
             .stats-card {
-                padding: 0.75rem;
+                padding: 0.6rem;
             }
             
             .card-amarilla, .card-roja, .card-roja-doble, .card-roja-directa {
-                width: 16px;
-                height: 22px;
+                width: 12px;
+                height: 16px;
+            }
+            
+            .card-roja-doble::before {
+                font-size: 6px;
+            }
+            
+            .table th small {
+                font-size: 0.5rem;
+                display: inline-block;
+                line-height: 1;
+                margin-left: 2px;
+                vertical-align: middle;
+            }
+            
+            /* En móviles, headers más compactos */
+            .table th {
+                padding: 0.25rem 0.1rem !important;
+            }
+            
+            .table th .card-amarilla,
+            .table th .card-roja-doble,
+            .table th .card-roja-directa {
+                display: inline-block;
+                vertical-align: middle;
+                margin: 0 1px;
+            }
+            
+            .table th div {
+                line-height: 1.2;
+            }
+            
+            .table th div small {
+                margin-left: 2px;
+                vertical-align: middle;
+            }
+            
+            /* Eliminar márgenes innecesarios */
+            .table {
+                margin-bottom: 0;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .container {
+                padding-left: 2px;
+                padding-right: 2px;
+            }
+            
+            /* En pantallas muy pequeñas, hacer la tabla aún más compacta */
+            .table-responsive {
+                font-size: 0.5rem;
+                margin-left: -2px;
+                margin-right: -2px;
+            }
+            
+            .table thead th {
+                padding: 0.25rem 0.1rem;
+                font-size: 0.5rem;
+                line-height: 1.1;
+            }
+            
+            .table tbody td {
+                padding: 0.25rem 0.1rem;
+                font-size: 0.5rem;
+            }
+            
+            .table img {
+                width: 14px !important;
+                height: 14px !important;
+            }
+            
+            .badge {
+                font-size: 0.45rem;
+                padding: 0.08rem 0.15rem;
+                line-height: 1;
+                min-width: 16px;
+            }
+            
+            .fairplay-badge {
+                width: 20px;
+                height: 20px;
+                font-size: 0.6rem;
+            }
+            
+            .table td strong {
+                font-size: 0.5rem;
+            }
+            
+            h2 {
+                font-size: 1.1rem;
             }
             
             .d-flex.justify-content-between {
                 flex-direction: column;
                 align-items: flex-start !important;
             }
+            
+            .card-body {
+                padding: 0.3rem;
+            }
+            
+            .card-header {
+                padding: 0.4rem;
+                font-size: 0.7rem;
+            }
+            
+            /* Card de tabla sin padding en móviles pequeños - ya está en 0 */
+            
+            /* Ajustar container para maximizar espacio */
+            .container {
+                padding-left: 1px;
+                padding-right: 1px;
+            }
+            
+            .card-amarilla, .card-roja, .card-roja-doble, .card-roja-directa {
+                width: 10px;
+                height: 14px;
+            }
+            
+            .card-roja-doble::before {
+                font-size: 5px;
+            }
+            
+            .table th small {
+                font-size: 0.45rem;
+                display: inline-block;
+                line-height: 1;
+                margin-left: 2px;
+                vertical-align: middle;
+            }
+            
+            /* Headers aún más compactos en móviles pequeños */
+            .table th {
+                padding: 0.2rem 0.08rem !important;
+            }
+            
+            /* Reducir espacio en nombres de equipos */
+            .table td .d-flex {
+                gap: 0.2rem;
+            }
+            
+            .me-2 {
+                margin-right: 0.25rem !important;
+            }
+            
+            /* Ocultar íconos de trofeo en móviles muy pequeños para ahorrar espacio */
+            .trophy-icon {
+                font-size: 0.7rem;
+            }
         }
         
-        @media (max-width: 576px) {
-            h2 {
-                font-size: 1.25rem;
+        @media (max-width: 375px) {
+            /* Para pantallas muy pequeñas como iPhone SE */
+            .table-responsive {
+                font-size: 0.45rem;
             }
             
-            .tabla-fairplay {
-                font-size: 0.75rem;
+            .table thead th {
+                padding: 0.2rem 0.08rem;
+                font-size: 0.45rem;
             }
             
-            .table th, .table td {
-                padding: 0.4rem 0.2rem;
-                font-size: 0.75rem;
+            .table tbody td {
+                padding: 0.2rem 0.08rem;
+                font-size: 0.45rem;
+            }
+            
+            .table img {
+                width: 12px !important;
+                height: 12px !important;
             }
             
             .fairplay-badge {
-                width: 30px;
-                height: 30px;
-                font-size: 0.9rem;
+                width: 18px;
+                height: 18px;
+                font-size: 0.55rem;
+            }
+            
+            .badge {
+                font-size: 0.4rem;
+                padding: 0.06rem 0.12rem;
+                min-width: 14px;
+            }
+            
+            .table td strong {
+                font-size: 0.45rem;
+            }
+            
+            .card-amarilla, .card-roja, .card-roja-doble, .card-roja-directa {
+                width: 9px;
+                height: 12px;
+            }
+            
+            .card-roja-doble::before {
+                font-size: 4px;
+            }
+            
+            .table th small {
+                font-size: 0.4rem;
+                display: inline-block;
+                margin-left: 1px;
+            }
+            
+            .table th {
+                padding: 0.15rem 0.05rem !important;
+            }
+            
+            /* Ocultar íconos de trofeo en pantallas muy pequeñas */
+            .trophy-icon {
+                display: none;
+            }
+        }
+        
+        /* Mejorar legibilidad en todas las pantallas */
+        .table-responsive {
+            border-radius: 0.375rem;
+        }
+        
+        /* En móviles, forzar que la tabla use 100% del ancho */
+        @media (max-width: 768px) {
+            .tabla-fairplay {
+                width: 100% !important;
+                table-layout: auto;
+            }
+            
+            .table-responsive {
+                overflow-x: visible;
+            }
+            
+            /* Ajustar anchos de columnas para que quepan */
+            .tabla-fairplay th:first-child,
+            .tabla-fairplay td:first-child {
+                width: auto;
+                min-width: 25px;
+                max-width: 30px;
+            }
+            
+            .tabla-fairplay th:nth-child(2),
+            .tabla-fairplay td:nth-child(2) {
+                width: auto;
+                min-width: 60px;
+                max-width: 80px;
+            }
+            
+            .tabla-fairplay th:nth-child(3),
+            .tabla-fairplay td:nth-child(3),
+            .tabla-fairplay th:nth-child(4),
+            .tabla-fairplay td:nth-child(4),
+            .tabla-fairplay th:nth-child(5),
+            .tabla-fairplay td:nth-child(5),
+            .tabla-fairplay th:nth-child(6),
+            .tabla-fairplay td:nth-child(6),
+            .tabla-fairplay th:last-child,
+            .tabla-fairplay td:last-child {
+                width: auto;
+                min-width: 28px;
+                max-width: 35px;
+            }
+            
+            /* Truncar nombres largos */
+            .tabla-fairplay td:nth-child(2) strong {
+                display: inline-block;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 100%;
+            }
+            
+            /* Hacer que los badges sean más compactos - solo números sin padding extra */
+            .tabla-fairplay .badge {
+                padding: 0.08rem 0.15rem !important;
+                min-width: 18px;
+            }
+            
+            /* Los puntos sin badge para ahorrar espacio */
+            .tabla-fairplay td:last-child strong {
+                font-size: 0.55rem;
+            }
+            
+            /* Ajustar anchos máximos de columnas para que quepan */
+            .tabla-fairplay th:first-child,
+            .tabla-fairplay td:first-child {
+                max-width: 28px;
+            }
+            
+            .tabla-fairplay th:nth-child(2),
+            .tabla-fairplay td:nth-child(2) {
+                max-width: 75px;
+            }
+            
+            .tabla-fairplay th:nth-child(3),
+            .tabla-fairplay td:nth-child(3),
+            .tabla-fairplay th:nth-child(4),
+            .tabla-fairplay td:nth-child(4),
+            .tabla-fairplay th:nth-child(5),
+            .tabla-fairplay td:nth-child(5),
+            .tabla-fairplay th:nth-child(6),
+            .tabla-fairplay td:nth-child(6) {
+                max-width: 32px;
+            }
+            
+            .tabla-fairplay th:last-child,
+            .tabla-fairplay td:last-child {
+                max-width: 32px;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .tabla-fairplay th:nth-child(2),
+            .tabla-fairplay td:nth-child(2) {
+                max-width: 65px;
+            }
+            
+            .tabla-fairplay th:first-child,
+            .tabla-fairplay td:first-child {
+                max-width: 25px;
+            }
+            
+            .tabla-fairplay th:nth-child(3),
+            .tabla-fairplay td:nth-child(3),
+            .tabla-fairplay th:nth-child(4),
+            .tabla-fairplay td:nth-child(4),
+            .tabla-fairplay th:nth-child(5),
+            .tabla-fairplay td:nth-child(5),
+            .tabla-fairplay th:nth-child(6),
+            .tabla-fairplay td:nth-child(6),
+            .tabla-fairplay th:last-child,
+            .tabla-fairplay td:last-child {
+                max-width: 28px;
+            }
+        }
+        
+        @media (max-width: 375px) {
+            .tabla-fairplay th:nth-child(2),
+            .tabla-fairplay td:nth-child(2) {
+                max-width: 55px;
+            }
+            
+            .tabla-fairplay th:first-child,
+            .tabla-fairplay td:first-child {
+                max-width: 22px;
+            }
+            
+            .tabla-fairplay th:nth-child(3),
+            .tabla-fairplay td:nth-child(3),
+            .tabla-fairplay th:nth-child(4),
+            .tabla-fairplay td:nth-child(4),
+            .tabla-fairplay th:nth-child(5),
+            .tabla-fairplay td:nth-child(5),
+            .tabla-fairplay th:nth-child(6),
+            .tabla-fairplay td:nth-child(6),
+            .tabla-fairplay th:last-child,
+            .tabla-fairplay td:last-child {
+                max-width: 25px;
+            }
+        }
+        
+        @media (min-width: 769px) {
+            .tabla-fairplay {
+                width: 100%;
             }
         }
     </style>
@@ -491,33 +880,52 @@ if ($categoria_id && !empty($fairplay)) {
             <?php endif; ?>
 
             <!-- Tabla Fair Play -->
-            <div class="card">
+            <div class="card card-tabla-fairplay">
                 <div class="card-header bg-success text-white">
                     <h4 class="mb-0">
                         <i class="fas fa-star"></i> 
                         <?= htmlspecialchars($categoria_actual['campeonato_nombre'] . ' - ' . $categoria_actual['nombre']); ?>
                     </h4>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-hover tabla-fairplay mb-0">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover tabla-fairplay mb-0">
                         <thead>
                             <tr>
-                                <th class="text-center" style="width: 8%;">Pos</th>
-                                <th style="width: 30%;">Equipo</th>
-                                <th class="text-center d-none-mobile" style="width: 8%;">PJ</th>
-                                <th class="text-center hide-xs" style="width: 10%;">
-                                    <span class="card-amarilla"></span><br>
-									<small>Amarilla</small>
+                                <th class="text-center">Pos</th>
+                                <th>Equipo</th>
+                                <th class="text-center">PJ</th>
+                                <th class="text-center">
+                                    <div class="d-md-block d-none">
+                                        <span class="card-amarilla"></span><br>
+                                        <small>Amarilla</small>
+                                    </div>
+                                    <div class="d-md-none">
+                                        <span class="card-amarilla"></span>
+                                        <small>A</small>
+                                    </div>
                                 </th>
-                                <th class="text-center hide-xs" style="width: 12%;">
-                                    <span class="card-roja-doble"></span><br>
-                                    <small>Doble Amarilla</small>
+                                <th class="text-center">
+                                    <div class="d-md-block d-none">
+                                        <span class="card-roja-doble"></span><br>
+                                        <small>Doble Amarilla</small>
+                                    </div>
+                                    <div class="d-md-none">
+                                        <span class="card-roja-doble"></span>
+                                        <small>2A</small>
+                                    </div>
                                 </th>
-                                <th class="text-center hide-xs" style="width: 12%;">
-                                    <span class="card-roja-directa"></span><br>
-                                    <small>Directa</small>
+                                <th class="text-center">
+                                    <div class="d-md-block d-none">
+                                        <span class="card-roja-directa"></span><br>
+                                        <small>Directa</small>
+                                    </div>
+                                    <div class="d-md-none">
+                                        <span class="card-roja-directa"></span>
+                                        <small>R</small>
+                                    </div>
                                 </th>
-                                <th class="text-center" style="width: 10%;">Puntos</th>                                
+                                <th class="text-center">Pts</th>                                
                             </tr>
                         </thead>
                         <tbody>
@@ -548,11 +956,11 @@ if ($categoria_id && !empty($fairplay)) {
                                     <div class="d-flex align-items-center">
                                         <?php if ($f['logo']): ?>
                                             <img src="../uploads/<?= htmlspecialchars($f['logo']) ?>" 
-                                                 alt="Logo" class="me-2 rounded" width="35" height="35" 
-                                                 style="object-fit: cover;">
+                                                 alt="Logo" class="me-2" width="30" height="30" 
+                                                 style="object-fit: cover; border-radius: 50%;">
                                         <?php else: ?>
-                                            <div class="rounded me-2 d-flex align-items-center justify-content-center" 
-                                                 style="width: 35px; height: 35px; background-color: <?= $f['color_camiseta'] ?: '#6c757d' ?>;">
+                                            <div class="bg-secondary rounded-circle me-2 d-flex align-items-center justify-content-center" 
+                                                 style="width: 30px; height: 30px; background-color: <?= $f['color_camiseta'] ?: '#6c757d' ?> !important;">
                                                 <i class="fas fa-shield-alt text-white"></i>
                                             </div>
                                         <?php endif; ?>
@@ -564,23 +972,17 @@ if ($categoria_id && !empty($fairplay)) {
                                         <?php endif; ?>
                                     </div>
                                 </td>
-                                <td class="text-center d-none-mobile">
+                                <td class="text-center">
                                     <span class="badge bg-secondary"><?= $f['partidos_jugados'] ?></span>
                                 </td>
-                                <td class="text-center hide-xs">
-                                    <span class="badge bg-warning text-dark">
-                                        <?= $f['amarillas'] ?>
-                                    </span>
+                                <td class="text-center">
+                                    <span class="badge bg-warning text-dark"><?= $f['amarillas'] ?></span>
                                 </td>
-                                <td class="text-center hide-xs">
-                                    <span class="badge" style="background-color: #FF6B6B;">
-                                        <?= $f['rojas_doble'] ?>
-                                    </span>
+                                <td class="text-center">
+                                    <span class="badge" style="background-color: #FF6B6B; color: white;"><?= $f['rojas_doble'] ?></span>
                                 </td>
-                                <td class="text-center hide-xs">
-                                    <span class="badge" style="background-color: #8B0000;">
-                                        <?= $f['rojas_directa'] ?>
-                                    </span>
+                                <td class="text-center">
+                                    <span class="badge" style="background-color: #8B0000; color: white;"><?= $f['rojas_directa'] ?></span>
                                 </td>
                                 <td class="text-center">
                                     <strong class="text-primary"><?= $f['puntos'] ?></strong>
@@ -589,6 +991,7 @@ if ($categoria_id && !empty($fairplay)) {
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
 

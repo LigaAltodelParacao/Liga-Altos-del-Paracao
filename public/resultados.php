@@ -148,6 +148,7 @@ function obtenerEventosPorPartido($partido_id, $db) {
             $e['periodo'] = "";
             $e['minuto_display'] = $min;
         }
+        $e['equipo_iniciales'] = getTeamInitials($e['nombre_equipo'] ?? '');
     }
     return $eventos;
 }
@@ -616,6 +617,7 @@ if (!empty($_GET['ajax'])) {
                                                 <h6><?= htmlspecialchars($partido['equipo_local']) ?></h6>
                                                 <div class="eventos-lista">
                                                     <?php foreach ($eventos_local as $evento): 
+                                                        $iniciales = $evento['equipo_iniciales'] ?? getTeamInitials($evento['nombre_equipo'] ?? '');
                                                         $icono = '';
                                                         if ($evento['tipo_evento'] === 'gol') $icono = '⚽';
                                                         elseif ($evento['tipo_evento'] === 'amarilla') $icono = '🟨';
@@ -625,6 +627,7 @@ if (!empty($_GET['ajax'])) {
                                                     ?>
                                                     <span class="event-badge event-<?= $evento['tipo_evento'] ?>" title="<?= htmlspecialchars($evento['apellido_nombre']) ?>">
                                                         <?= $icono ?> <?= htmlspecialchars($evento['apellido_nombre']) ?> <?= $minutoDisplay ?>' <?= $evento['periodo'] ?>
+                                                        <?php if ($iniciales): ?> (<?= htmlspecialchars($iniciales) ?>)<?php endif; ?>
                                                     </span>
                                                     <?php endforeach; ?>
                                                 </div>
@@ -686,6 +689,7 @@ if (!empty($_GET['ajax'])) {
                                                 <h6><?= htmlspecialchars($partido['equipo_visitante']) ?></h6>
                                                 <div class="eventos-lista">
                                                     <?php foreach ($eventos_visitante as $evento): 
+                                                        $iniciales = $evento['equipo_iniciales'] ?? getTeamInitials($evento['nombre_equipo'] ?? '');
                                                         $icono = '';
                                                         if ($evento['tipo_evento'] === 'gol') $icono = '⚽';
                                                         elseif ($evento['tipo_evento'] === 'amarilla') $icono = '🟨';
@@ -695,6 +699,7 @@ if (!empty($_GET['ajax'])) {
                                                     ?>
                                                     <span class="event-badge event-<?= $evento['tipo_evento'] ?>" title="<?= htmlspecialchars($evento['apellido_nombre']) ?>">
                                                         <?= $icono ?> <?= htmlspecialchars($evento['apellido_nombre']) ?> <?= $minutoDisplay ?>' <?= $evento['periodo'] ?>
+                                                        <?php if ($iniciales): ?> (<?= htmlspecialchars($iniciales) ?>)<?php endif; ?>
                                                     </span>
                                                     <?php endforeach; ?>
                                                 </div>
@@ -821,6 +826,25 @@ if (!empty($_GET['ajax'])) {
         }
     }
 
+    function obtenerInicialesEquipo(nombre) {
+        if (!nombre) return '';
+        const stopWords = new Set(['DE','DEL','LA','LAS','LOS','EL','Y','SAN','SANTA','CLUB','ATLETICO','FC','F.C','CF','C.F','SPORTIVO']);
+        const words = nombre.trim().split(/\s+/);
+        const letters = [];
+        for (const word of words) {
+            const clean = word.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g, '');
+            if (!clean) continue;
+            const upper = clean.toUpperCase();
+            if (stopWords.has(upper)) continue;
+            letters.push(upper.charAt(0));
+            if (letters.length >= 3) break;
+        }
+        if (!letters.length && words.length) {
+            return words[0].substring(0, 2).toUpperCase();
+        }
+        return letters.join('');
+    }
+
     function mostrarModalEventos(partidoId) {
         fetch(`?ajax=eventos_partido&partido_id=${partidoId}`)
             .then(response => response.json())
@@ -850,11 +874,12 @@ if (!empty($_GET['ajax'])) {
                         else if (min >= 46 && min <= 90) periodo = "2ºT";
                         else if (min > 90) periodo = "ET";
 
+                        const iniciales = e.equipo_iniciales || obtenerInicialesEquipo(e.nombre_equipo);
                         eventosHtml += `
                         <div class="list-group-item d-flex justify-content-between align-items-center">
                             <div>
                                 <strong class="${color}">${icono}</strong>
-                                ${e.apellido_nombre} (${e.nombre_equipo})
+                                ${e.apellido_nombre} (${e.nombre_equipo}) ${iniciales ? '(' + iniciales + ')' : ''}
                             </div>
                             <span class="badge bg-light text-dark">${e.minuto}' ${periodo}</span>
                         </div>`;

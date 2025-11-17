@@ -82,6 +82,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($partido['zona_id']) {
                 actualizarEstadisticasZona($partido['zona_id'], $partido['equipo_local_id'], $db);
                 actualizarEstadisticasZona($partido['zona_id'], $partido['equipo_visitante_id'], $db);
+                
+                // Recalcular tabla de posiciones con desempate
+                require_once __DIR__ . '/include/desempate_functions.php';
+                calcularTablaPosicionesConDesempate($partido['zona_id'], $db);
             }
             
             // Procesar eventos y sanciones automáticas (usando el sistema existente)
@@ -97,12 +101,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Verificar si todos los partidos están finalizados para generar eliminatorias
             if (todosPartidosGruposFinalizados($formato_id, $db)) {
-                // Intentar generar eliminatorias automáticamente
-                try {
-                    generarFixtureEliminatorias($formato_id, $db);
-                    $_SESSION['message'] = 'Resultado guardado. ¡Fase de grupos completada! Se generaron automáticamente los partidos eliminatorios.';
-                } catch (Exception $e) {
-                    $_SESSION['message'] = 'Resultado guardado. ' . $e->getMessage();
+                // Recalcular todas las tablas para detectar empates pendientes
+                require_once __DIR__ . '/include/desempate_functions.php';
+                $stmt = $db->prepare("SELECT id FROM zonas WHERE formato_id = ?");
+                $stmt->execute([$formato_id]);
+                $zonas_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                
+                foreach ($zonas_ids as $zona_id) {
+                    calcularTablaPosicionesConDesempate($zona_id, $db);
+                }
+                
+                // Verificar si hay empates pendientes
+                if (hayEmpatesPendientes($formato_id, $db)) {
+                    $empates = obtenerEmpatesPendientes($formato_id, $db);
+                    $_SESSION['message'] = 'Resultado guardado. ¡Fase de grupos completada! Sin embargo, hay ' . count($empates) . ' empate(s) pendiente(s) de resolución por sorteo. ';
+                    $_SESSION['message'] .= '<a href="resolver_empates.php?formato_id=' . $formato_id . '" class="alert-link">Ir a Resolver Empates</a>';
+                } else {
+                    // Intentar generar eliminatorias automáticamente
+                    try {
+                        generarFixtureEliminatorias($formato_id, $db);
+                        $_SESSION['message'] = 'Resultado guardado. ¡Fase de grupos completada! Se generaron automáticamente los partidos eliminatorios.';
+                    } catch (Exception $e) {
+                        $_SESSION['message'] = 'Resultado guardado. ' . $e->getMessage();
+                    }
                 }
             } else {
                 $_SESSION['message'] = 'Resultado guardado correctamente';

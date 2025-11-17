@@ -433,6 +433,7 @@ if (isset($_GET['partido'])) {
                                     <?php else: ?>
                                         <div class="timeline">
                                             <?php foreach (array_reverse($eventos_partido) as $evento): ?>
+                                                <?php $equipoIniciales = getTeamInitials($evento['equipo_nombre'] ?? ''); ?>
                                                 <div class="event-card event-<?php echo $evento['tipo_evento']; ?>">
                                                     <div class="d-flex justify-content-between align-items-center">
                                                         <div class="flex-grow-1">
@@ -458,7 +459,12 @@ if (isset($_GET['partido'])) {
                                                                 ?>
                                                                 <i class="<?php echo $icon; ?> <?php echo $color; ?> me-2"></i>
                                                                 <strong><?php echo htmlspecialchars($evento['apellido_nombre']); ?></strong>
-                                                                <small class="text-muted ms-2">(<?php echo htmlspecialchars($evento['equipo_nombre']); ?>)</small>
+                                                                <small class="text-muted ms-2">
+                                                                    (<?php echo htmlspecialchars($evento['equipo_nombre']); ?>)
+                                                                    <?php if ($equipoIniciales): ?>
+                                                                        <span class="text-uppercase fw-semibold ms-1">(<?php echo htmlspecialchars($equipoIniciales); ?>)</span>
+                                                                    <?php endif; ?>
+                                                                </small>
                                                             </div>
                                                             <?php if ($evento['descripcion']): ?>
                                                                 <small class="text-muted"><?php echo htmlspecialchars($evento['descripcion']); ?></small>

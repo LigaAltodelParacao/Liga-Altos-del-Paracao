@@ -8,322 +8,177 @@ if (!isLoggedIn() || !hasPermission('admin')) {
 
 $db = Database::getInstance()->getConnection();
 
+$formato_id = $_GET['formato_id'] ?? null;
+
+if (!$formato_id) {
+    redirect('torneos_zonas.php');
+}
+
+// Obtener información del formato
+$stmt = $db->prepare("
+    SELECT 
+        cf.*,
+        c.nombre as campeonato_nombre,
+        cat.nombre as categoria_nombre,
+        cat.id as categoria_id
+    FROM campeonatos_formato cf
+    JOIN campeonatos c ON cf.campeonato_id = c.id
+    LEFT JOIN categorias cat ON cf.categoria_id = cat.id
+    WHERE cf.id = ?
+");
+$stmt->execute([$formato_id]);
+$formato = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$formato) {
+    redirect('torneos_zonas.php');
+}
+
 $message = '';
 $error = '';
 
-// Obtener campeonatos activos
-$campeonatos = $db->query("SELECT * FROM campeonatos WHERE activo=1 ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
-
-// Variables para filtros
-$campeonato_id = $_GET['campeonato_id'] ?? null;
-$categoria_id = $_GET['categoria_id'] ?? null;
-$formato_id = $_GET['formato_id'] ?? null;
-
-$categorias = [];
-$formatos = [];
-$tiene_zonas = false;
-$zonas = [];
-$equipos_por_zona = [];
-
-// Cargar categorías si hay campeonato
-if ($campeonato_id) {
-    $stmt = $db->prepare("SELECT * FROM categorias WHERE campeonato_id = ? AND activa = 1 ORDER BY nombre");
-    $stmt->execute([$campeonato_id]);
-    $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
-}
-
-// Cargar formatos si hay categoría
-if ($categoria_id) {
-    // Verificar si hay formatos de zona
-    $stmt = $db->prepare("SELECT * FROM campeonatos_formato WHERE campeonato_id = ? LIMIT 1");
-    $stmt->execute([$campeonato_id]);
-    $formato_zona = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if ($formato_zona) {
-        $tiene_zonas = true;
-        $stmt = $db->prepare("SELECT * FROM campeonatos_formato WHERE campeonato_id = ?");
-        $stmt->execute([$campeonato_id]);
-        $formatos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-}
-
-// Si hay formato seleccionado, cargar zonas
-if ($formato_id && $tiene_zonas) {
-    $stmt = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
-    $stmt->execute([$formato_id]);
-    $zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Cargar equipos por zona
-    foreach ($zonas as $zona) {
-        $stmt = $db->prepare("
-            SELECT e.*, ez.posicion
-            FROM equipos_zonas ez
-            JOIN equipos e ON ez.equipo_id = e.id
-            WHERE ez.zona_id = ?
-            ORDER BY ez.posicion
-        ");
-        $stmt->execute([$zona['id']]);
-        $equipos_por_zona[$zona['id']] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-}
-
-// Obtener canchas
-$canchas = $db->query("SELECT * FROM canchas WHERE activa = 1 ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
-
 // Procesar generación de fixture
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generar_fixture'])) {
-    $tipo_campeonato = $_POST['tipo_campeonato'] ?? 'comun';
-    
     try {
         $db->beginTransaction();
         
-        if ($tipo_campeonato === 'zonas') {
-            // Generar fixture para campeonato con zonas
-            $formato_id = $_POST['formato_id'] ?? null;
-            if (!$formato_id) {
-                throw new Exception('Formato no especificado');
+        $fecha_inicio = $_POST['fecha_inicio'] ?? date('Y-m-d');
+        $dias_entre_fechas = (int)($_POST['dias_entre_fechas'] ?? 7);
+        $tipo_fixture = $_POST['tipo_fixture'] ?? 'todos_contra_todos';
+        
+        // ========== LIMPIAR FIXTURE ANTERIOR ==========
+        // Obtener todas las zonas del formato
+        $stmt = $db->prepare("SELECT id FROM zonas WHERE formato_id = ?");
+        $stmt->execute([$formato_id]);
+        $zona_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        // Obtener todas las fases eliminatorias del formato
+        $stmt = $db->prepare("SELECT id FROM fases_eliminatorias WHERE formato_id = ?");
+        $stmt->execute([$formato_id]);
+        $fase_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        // 1. Eliminar partidos de zonas
+        if (!empty($zona_ids)) {
+            $placeholders = str_repeat('?,', count($zona_ids) - 1) . '?';
+            $stmt = $db->prepare("
+                DELETE FROM partidos 
+                WHERE zona_id IN ($placeholders) AND tipo_torneo = 'zona'
+            ");
+            $stmt->execute($zona_ids);
+        }
+        
+        // 2. Eliminar partidos eliminatorios
+        if (!empty($fase_ids)) {
+            $placeholders = str_repeat('?,', count($fase_ids) - 1) . '?';
+            $stmt = $db->prepare("
+                DELETE FROM partidos 
+                WHERE fase_eliminatoria_id IN ($placeholders) AND tipo_torneo = 'eliminatoria'
+            ");
+            $stmt->execute($fase_ids);
+        }
+        
+        // 3. Eliminar fechas relacionadas que no tienen más partidos
+        // Obtener fechas de zonas y eliminatorias que no tienen partidos
+        if (!empty($formato['categoria_id'])) {
+            $stmt = $db->prepare("
+                SELECT f.id 
+                FROM fechas f
+                LEFT JOIN partidos p ON f.id = p.fecha_id
+                WHERE f.categoria_id = ? 
+                  AND (f.tipo_fecha = 'zona' OR f.tipo_fecha = 'eliminatoria')
+                  AND p.id IS NULL
+            ");
+            $stmt->execute([$formato['categoria_id']]);
+            $fechas_a_eliminar = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            
+            if (!empty($fechas_a_eliminar)) {
+                $placeholders = str_repeat('?,', count($fechas_a_eliminar) - 1) . '?';
+                $stmt = $db->prepare("
+                    DELETE FROM fechas 
+                    WHERE id IN ($placeholders)
+                ");
+                $stmt->execute($fechas_a_eliminar);
             }
+        }
+        
+        // 4. Eliminar fases eliminatorias (opcional - comentado por si se quieren mantener)
+        // Si se quiere eliminar también las fases eliminatorias descomentar esto:
+        // if (!empty($fase_ids)) {
+        //     $placeholders = str_repeat('?,', count($fase_ids) - 1) . '?';
+        //     $stmt = $db->prepare("DELETE FROM fases_eliminatorias WHERE id IN ($placeholders)");
+        //     $stmt->execute($fase_ids);
+        // }
+        
+        // ========== GENERAR NUEVO FIXTURE ==========
+        // Obtener zonas
+        $stmt = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
+        $stmt->execute([$formato_id]);
+        $zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        if (empty($zonas)) {
+            throw new Exception('No hay zonas configuradas para este torneo');
+        }
+        
+        // Verificar que todas las zonas tengan equipos
+        foreach ($zonas as $zona) {
+            $stmt = $db->prepare("SELECT COUNT(*) as total FROM equipos_zonas WHERE zona_id = ?");
+            $stmt->execute([$zona['id']]);
+            $count = $stmt->fetch(PDO::FETCH_ASSOC);
             
-            // Obtener zonas del formato
-            $stmt = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
-            $stmt->execute([$formato_id]);
-            $zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
-            if (empty($zonas)) {
-                throw new Exception('No hay zonas configuradas para este formato');
+            if ($count['total'] < 2) {
+                throw new Exception("La zona {$zona['nombre']} no tiene suficientes equipos (mínimo 2)");
             }
+        }
+        
+        // Generar fixture para cada zona
+        $partidos_generados = 0;
+        foreach ($zonas as $zona) {
+            // Calcular fecha de inicio para esta zona
+            $fecha_zona = new DateTime($fecha_inicio);
             
-            // Generar fixture para cada zona
-            foreach ($zonas as $zona) {
-                $resultado = generarFixtureZona($zona['id'], $db);
-                if (!$resultado) {
-                    throw new Exception("Error al generar fixture para la zona {$zona['nombre']}");
-                }
-            }
+            // Generar fixture
+            generarFixtureZona($zona['id'], $db, $fecha_zona->format('Y-m-d'), $dias_entre_fechas);
             
-            $message = 'Fixture de zonas generado exitosamente.';
-        } else {
-            // Generar fixture común
-            generarFixtureComun($db, $_POST);
-            $message = 'Fixture común generado exitosamente.';
+            // Contar partidos generados
+            $stmt = $db->prepare("SELECT COUNT(*) as total FROM partidos WHERE zona_id = ? AND tipo_torneo = 'zona'");
+            $stmt->execute([$zona['id']]);
+            $count = $stmt->fetch(PDO::FETCH_ASSOC);
+            $partidos_generados += $count['total'];
         }
         
         $db->commit();
         
+        $message = "Fixture generado exitosamente. Se eliminaron los fixtures anteriores y se crearon {$partidos_generados} partidos en " . count($zonas) . " zona(s).";
+        
     } catch (Exception $e) {
-        if ($db->inTransaction()) {
-            $db->rollBack();
-        }
+        $db->rollBack();
         $error = 'Error al generar fixture: ' . $e->getMessage();
     }
 }
 
-/**
- * Genera fixture común (todos contra todos)
- */
-function generarFixtureComun($db, $data) {
-    $categoria_id = $data['categoria_id'] ?? null;
-    $fecha_inicio = $data['fecha_inicio'] ?? date('Y-m-d');
-    $dias_entre_fechas = (int)($data['dias_entre_fechas'] ?? 7);
-    $tipo_fixture = $data['tipo_fixture'] ?? 'todos_contra_todos';
-    
-    if (!$categoria_id) {
-        throw new Exception('Categoría no especificada');
-    }
-    
-    // Limpiar fechas y partidos existentes
-    $stmt = $db->prepare("DELETE FROM partidos WHERE fecha_id IN (SELECT id FROM fechas WHERE categoria_id = ?)");
-    $stmt->execute([$categoria_id]);
-    
-    $stmt = $db->prepare("DELETE FROM fechas WHERE categoria_id = ?");
-    $stmt->execute([$categoria_id]);
-    
-    // Obtener equipos de la categoría
-    $stmt = $db->prepare("
-        SELECT id, nombre
-        FROM equipos
-        WHERE categoria_id = ? AND activo = 1
-        ORDER BY nombre
-    ");
-    $stmt->execute([$categoria_id]);
-    $equipos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    if (count($equipos) < 2) {
-        throw new Exception('La categoría debe tener al menos 2 equipos');
-    }
-    
-    // Generar fixture
-    $partidos = generarTodosContraTodos($equipos);
-    
-    // Si es ida y vuelta
-    if ($tipo_fixture === 'ida_vuelta') {
-        $partidos_vuelta = [];
-        foreach ($partidos as $fecha => $partidos_fecha) {
-            foreach ($partidos_fecha as $partido) {
-                $partidos_vuelta[$fecha][] = [
-                    'local' => $partido['visitante'],
-                    'visitante' => $partido['local']
-                ];
-            }
-        }
-        $ultima_fecha = max(array_keys($partidos));
-        foreach ($partidos_vuelta as $fecha => $partidos_fecha) {
-            $partidos[$ultima_fecha + $fecha] = $partidos_fecha;
-        }
-    }
-    
-    // Insertar fechas y partidos
-    $fecha_actual = new DateTime($fecha_inicio);
-    
-    foreach ($partidos as $numero_fecha => $partidos_fecha) {
-        // Crear fecha
-        $stmt = $db->prepare("
-            INSERT INTO fechas (categoria_id, numero_fecha, fecha_programada, activa)
-            VALUES (?, ?, ?, 1)
-        ");
-        $stmt->execute([$categoria_id, $numero_fecha, $fecha_actual->format('Y-m-d')]);
-        $fecha_id = $db->lastInsertId();
-        
-        // Insertar partidos
-        $stmt_partido = $db->prepare("
-            INSERT INTO partidos 
-            (fecha_id, equipo_local_id, equipo_visitante_id, fecha_partido, estado)
-            VALUES (?, ?, ?, ?, 'programado')
-        ");
-        
-        foreach ($partidos_fecha as $partido) {
-            $stmt_partido->execute([
-                $fecha_id,
-                $partido['local']['id'],
-                $partido['visitante']['id'],
-                $fecha_actual->format('Y-m-d')
-            ]);
-        }
-        
-        $fecha_actual->modify("+{$dias_entre_fechas} days");
-    }
-    
-    logActivity("Fixture común generado para categoría $categoria_id");
-}
+// Obtener zonas con información
+$stmt = $db->prepare("
+    SELECT 
+        z.*,
+        (SELECT COUNT(*) FROM equipos_zonas WHERE zona_id = z.id) as total_equipos,
+        (SELECT COUNT(*) FROM partidos WHERE zona_id = z.id AND tipo_torneo = 'zona') as total_partidos,
+        (SELECT COUNT(*) FROM partidos WHERE zona_id = z.id AND tipo_torneo = 'zona' AND estado = 'finalizado') as partidos_finalizados
+    FROM zonas z
+    WHERE z.formato_id = ?
+    ORDER BY z.orden
+");
+$stmt->execute([$formato_id]);
+$zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-/**
- * Genera fixture para campeonato con zonas
- */
-function generarFixtureZonas($db, $data) {
-    $formato_id = $data['formato_id'] ?? null;
-    $fecha_inicio = $data['fecha_inicio'] ?? date('Y-m-d');
-    $dias_entre_fechas = (int)($data['dias_entre_fechas'] ?? 7);
-    $tipo_fixture = $data['tipo_fixture'] ?? 'todos_contra_todos';
-    
-    if (!$formato_id) {
-        throw new Exception('Formato no especificado');
-    }
-    
-    // Obtener formato
-    $stmt = $db->prepare("SELECT * FROM campeonatos_formato WHERE id = ?");
-    $stmt->execute([$formato_id]);
-    $formato = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if (!$formato) {
-        throw new Exception('Formato no encontrado');
-    }
-    
-    // Limpiar partidos existentes de zonas
-    $stmt = $db->prepare("
-        DELETE FROM partidos 
-        WHERE zona_id IN (SELECT id FROM zonas WHERE formato_id = ?) AND tipo_torneo = 'zona'
-    ");
-    $stmt->execute([$formato_id]);
-    
-    // Limpiar fechas de zonas
-    $stmt = $db->prepare("
-        DELETE FROM fechas 
-        WHERE zona_id IN (SELECT id FROM zonas WHERE formato_id = ?) AND tipo_fecha = 'zona'
-    ");
-    $stmt->execute([$formato_id]);
-    
-    // Limpiar partidos eliminatorios
-    $stmt = $db->prepare("
-        DELETE FROM partidos 
-        WHERE fase_eliminatoria_id IN (SELECT id FROM fases_eliminatorias WHERE formato_id = ?) AND tipo_torneo = 'eliminatoria'
-    ");
-    $stmt->execute([$formato_id]);
-    
-    // Obtener zonas
-    $stmt = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
-    $stmt->execute([$formato_id]);
-    $zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Generar fixture para cada zona usando la función
-    foreach ($zonas as $zona) {
-        $resultado = generarFixtureZona($zona['id'], $db);
-        if (!$resultado) {
-            throw new Exception("Error al generar fixture para la zona {$zona['nombre']}");
-        }
-    }
-    
-    // Los partidos eliminatorios se generan automáticamente cuando se completa la fase de grupos
-    // usando la función generarFixtureEliminatorias() en funciones_torneos_zonas.php
-    
-    logActivity("Fixture de zonas generado para formato $formato_id");
-}
-
-/**
- * Genera fixture todos contra todos usando algoritmo Round-Robin
- */
-function generarTodosContraTodos($equipos) {
-    $n = count($equipos);
-    
-    $tiene_dummy = ($n % 2 != 0);
-    if ($tiene_dummy) {
-        $equipos[] = ['id' => null, 'nombre' => 'DESCANSO'];
-        $n++;
-    }
-    
-    $total_fechas = $n - 1;
-    $partidos_por_fecha = $n / 2;
-    
-    $fixture = [];
-    
-    for ($fecha = 1; $fecha <= $total_fechas; $fecha++) {
-        $fixture[$fecha] = [];
-        
-        for ($i = 0; $i < $partidos_por_fecha; $i++) {
-            $local_idx = ($fecha + $i - 1) % ($n - 1);
-            $visitante_idx = ($n - 1 - $i + $fecha - 1) % ($n - 1);
-            
-            if ($i == 0) {
-                $visitante_idx = $n - 1;
-            }
-            
-            $local = $equipos[$local_idx];
-            $visitante = $equipos[$visitante_idx];
-            
-            if ($fecha % 2 == 0) {
-                $temp = $local;
-                $local = $visitante;
-                $visitante = $temp;
-            }
-            
-            if ($local['id'] !== null && $visitante['id'] !== null) {
-                $fixture[$fecha][] = [
-                    'local' => $local,
-                    'visitante' => $visitante
-                ];
-            }
-        }
-    }
-    
-    return $fixture;
-}
-
+// Obtener canchas disponibles
+$canchas = $db->query("SELECT * FROM canchas WHERE activa = 1 ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generar Fixture</title>
+    <title>Generar Fixture - Torneo con Zonas</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="<?php echo SITE_URL; ?>assets/css/style.css" rel="stylesheet">
@@ -344,142 +199,129 @@ function generarTodosContraTodos($equipos) {
     <div class="container-fluid">
         <div class="row">
             <div class="col-md-3 col-lg-2 p-0">
-                <?php include __DIR__ . '/include/sidebar.php'; ?>
+                <?php include __DIR__ . '/../include/sidebar.php'; ?>
             </div>
 
             <div class="col-md-9 col-lg-10 p-4">
-                <h2><i class="fas fa-calendar-alt"></i> Generar Fixture</h2>
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h2><i class="fas fa-calendar-alt"></i> Generar Fixture</h2>
+                        <p class="text-muted mb-0">
+                            <?= htmlspecialchars($formato['campeonato_nombre']) ?> - 
+                            <?= htmlspecialchars($formato['categoria_nombre']) ?>
+                        </p>
+                    </div>
+                    <a href="torneos_zonas.php" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Volver
+                    </a>
+                </div>
 
                 <?php if ($message): ?>
                     <div class="alert alert-success alert-dismissible fade show">
-                        <?= htmlspecialchars($message) ?>
+                        <i class="fas fa-check-circle"></i> <?= htmlspecialchars($message) ?>
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 <?php endif; ?>
 
                 <?php if ($error): ?>
                     <div class="alert alert-danger alert-dismissible fade show">
-                        <?= htmlspecialchars($error) ?>
+                        <i class="fas fa-exclamation-triangle"></i> <?= htmlspecialchars($error) ?>
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 <?php endif; ?>
 
-                <!-- Filtros -->
+                <!-- Resumen de Zonas -->
                 <div class="card mb-4">
                     <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0"><i class="fas fa-filter"></i> Seleccionar Campeonato</h5>
+                        <h5 class="mb-0"><i class="fas fa-layer-group"></i> Zonas del Torneo</h5>
                     </div>
                     <div class="card-body">
-                        <form method="GET" id="filterForm">
-                            <div class="row">
-                                <div class="col-md-4">
-                                    <label class="form-label">Campeonato *</label>
-                                    <select name="campeonato_id" class="form-select" required onchange="this.form.submit()">
-                                        <option value="">Seleccionar...</option>
-                                        <?php foreach ($campeonatos as $camp): ?>
-                                            <option value="<?= $camp['id'] ?>" <?= ($campeonato_id == $camp['id']) ? 'selected' : '' ?>>
-                                                <?= htmlspecialchars($camp['nombre']) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
+                        <div class="row">
+                            <?php foreach ($zonas as $zona): ?>
+                                <div class="col-md-4 mb-3">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h6><?= htmlspecialchars($zona['nombre']) ?></h6>
+                                            <p class="mb-1">
+                                                <strong>Equipos:</strong> <?= $zona['total_equipos'] ?>
+                                            </p>
+                                            <p class="mb-1">
+                                                <strong>Partidos:</strong> 
+                                                <?= $zona['partidos_finalizados'] ?> / <?= $zona['total_partidos'] ?>
+                                                <?php if ($zona['total_partidos'] > 0): ?>
+                                                    <div class="progress mt-1" style="height: 5px;">
+                                                        <div class="progress-bar" 
+                                                             style="width: <?= ($zona['partidos_finalizados'] / $zona['total_partidos'] * 100) ?>%">
+                                                        </div>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
-
-                                <?php if ($campeonato_id && !empty($categorias)): ?>
-                                <div class="col-md-4">
-                                    <label class="form-label">Categoría *</label>
-                                    <select name="categoria_id" class="form-select" required onchange="this.form.submit()">
-                                        <option value="">Seleccionar...</option>
-                                        <?php foreach ($categorias as $cat): ?>
-                                            <option value="<?= $cat['id'] ?>" <?= ($categoria_id == $cat['id']) ? 'selected' : '' ?>>
-                                                <?= htmlspecialchars($cat['nombre']) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                                <?php endif; ?>
-
-                                <?php if ($tiene_zonas && !empty($formatos)): ?>
-                                <div class="col-md-4">
-                                    <label class="form-label">Formato de Zonas</label>
-                                    <select name="formato_id" class="form-select" onchange="this.form.submit()">
-                                        <option value="">Seleccionar...</option>
-                                        <?php foreach ($formatos as $fmt): ?>
-                                            <option value="<?= $fmt['id'] ?>" <?= ($formato_id == $fmt['id']) ? 'selected' : '' ?>>
-                                                <?= $fmt['cantidad_zonas'] ?> Zonas - <?= $fmt['equipos_por_zona'] ?> equipos c/u
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-                        </form>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
                 </div>
 
-                <?php if (($categoria_id && !$tiene_zonas) || ($formato_id && $tiene_zonas)): ?>
-                <!-- Formulario de generación -->
+                <!-- Formulario de Generación -->
                 <div class="card">
                     <div class="card-header bg-success text-white">
                         <h5 class="mb-0"><i class="fas fa-cog"></i> Configuración del Fixture</h5>
                     </div>
                     <div class="card-body">
                         <form method="POST">
-                            <input type="hidden" name="tipo_campeonato" value="<?= $tiene_zonas ? 'zonas' : 'comun' ?>">
-                            <input type="hidden" name="campeonato_id" value="<?= htmlspecialchars($campeonato_id) ?>">
-                            
-                            <?php if ($tiene_zonas): ?>
-                                <input type="hidden" name="formato_id" value="<?= htmlspecialchars($formato_id) ?>">
-                            <?php else: ?>
-                                <input type="hidden" name="categoria_id" value="<?= htmlspecialchars($categoria_id) ?>">
-                            <?php endif; ?>
-
-                            <div class="row">
-                                <div class="col-md-4">
-                                    <div class="mb-3">
-                                        <label class="form-label">Fecha de Inicio *</label>
-                                        <input type="date" name="fecha_inicio" class="form-control" value="<?= date('Y-m-d') ?>" required>
-                                    </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Fecha de Inicio *</label>
+                                    <input type="date" name="fecha_inicio" class="form-control" 
+                                           value="<?= date('Y-m-d') ?>" required>
                                 </div>
-                                <div class="col-md-4">
-                                    <div class="mb-3">
-                                        <label class="form-label">Días entre Fechas</label>
-                                        <input type="number" name="dias_entre_fechas" class="form-control" value="7" min="1" max="30">
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="mb-3">
-                                        <label class="form-label">Tipo de Fixture</label>
-                                        <select name="tipo_fixture" class="form-select">
-                                            <option value="todos_contra_todos">Todos contra Todos (Ida)</option>
-                                            <option value="ida_vuelta">Ida y Vuelta</option>
-                                        </select>
-                                    </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Días entre Fechas *</label>
+                                    <input type="number" name="dias_entre_fechas" class="form-control" 
+                                           value="7" min="1" required>
+                                    <small class="text-muted">Días entre cada jornada</small>
                                 </div>
                             </div>
 
-                            <?php if ($tiene_zonas && !empty($zonas)): ?>
-                            <div class="alert alert-info">
-                                <strong><i class="fas fa-info-circle"></i> Zonas del Campeonato:</strong>
-                                <div class="row mt-2">
-                                    <?php foreach ($zonas as $zona): ?>
-                                        <div class="col-md-6">
-                                            <strong><?= htmlspecialchars($zona['nombre']) ?>:</strong>
-                                            <?= count($equipos_por_zona[$zona['id']] ?? []) ?> equipos
-                                        </div>
-                                    <?php endforeach; ?>
-                                </div>
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle"></i> 
+                                <strong>Advertencia:</strong> Al generar un nuevo fixture, se eliminarán automáticamente:
+                                <ul class="mb-0 mt-2">
+                                    <li>Todos los partidos de fases de grupos (zonas)</li>
+                                    <li>Todos los partidos de fases eliminatorias</li>
+                                    <li>Las fechas asociadas a estos partidos</li>
+                                </ul>
+                                <strong class="text-danger">Esta acción no se puede deshacer.</strong>
                             </div>
-                            <?php endif; ?>
 
                             <div class="text-end">
+                                <a href="torneos_zonas.php" class="btn btn-secondary">
+                                    <i class="fas fa-times"></i> Cancelar
+                                </a>
                                 <button type="submit" name="generar_fixture" class="btn btn-success btn-lg">
-                                    <i class="fas fa-magic"></i> Generar Fixture
+                                    <i class="fas fa-calendar-alt"></i> Generar Fixture
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
-                <?php endif; ?>
+
+                <!-- Información -->
+                <div class="card mt-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="fas fa-info-circle"></i> Información</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="mb-0">
+                            <li>El fixture se genera usando el algoritmo <strong>Round-Robin</strong> (todos contra todos).</li>
+                            <li>Los partidos se crearán con estado <strong>pendiente</strong> y deberán ser asignados a canchas y horarios posteriormente.</li>
+                            <li>Después de generar el fixture, puedes gestionar los partidos desde <strong>Control de Partidos</strong>.</li>
+                            <li>Una vez finalizados todos los partidos de zona, podrás generar automáticamente las fases eliminatorias.</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -487,3 +329,4 @@ function generarTodosContraTodos($equipos) {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+

@@ -207,20 +207,114 @@ function generarFixtureZonas($db, $data) {
         throw new Exception('Formato no encontrado');
     }
     
-    // Limpiar partidos existentes
-    $stmt = $db->prepare("
-        DELETE pz FROM partidos_zona pz
-        JOIN zonas z ON pz.zona_id = z.id
-        WHERE z.formato_id = ?
-    ");
+    // ========== LIMPIAR FIXTURE ANTERIOR ==========
+    // Obtener todas las zonas del formato
+    $stmt = $db->prepare("SELECT id FROM zonas WHERE formato_id = ?");
     $stmt->execute([$formato_id]);
+    $zona_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
     
-    $stmt = $db->prepare("
-        DELETE pe FROM partidos_eliminatorios pe
-        JOIN fases_eliminatorias fe ON pe.fase_id = fe.id
-        WHERE fe.formato_id = ?
-    ");
+    // Obtener todas las fases eliminatorias del formato
+    $stmt = $db->prepare("SELECT id FROM fases_eliminatorias WHERE formato_id = ?");
     $stmt->execute([$formato_id]);
+    $fase_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    
+    // Obtener IDs de fechas que se van a eliminar (antes de eliminar partidos)
+    $fecha_ids_eliminar = [];
+    if (!empty($zona_ids)) {
+        $placeholders = str_repeat('?,', count($zona_ids) - 1) . '?';
+        $stmt = $db->prepare("
+            SELECT DISTINCT fecha_id 
+            FROM partidos 
+            WHERE zona_id IN ($placeholders) AND tipo_torneo = 'zona'
+        ");
+        $stmt->execute($zona_ids);
+        $fecha_ids_eliminar = array_merge($fecha_ids_eliminar, $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+    
+    if (!empty($fase_ids)) {
+        $placeholders = str_repeat('?,', count($fase_ids) - 1) . '?';
+        $stmt = $db->prepare("
+            SELECT DISTINCT fecha_id 
+            FROM partidos 
+            WHERE fase_eliminatoria_id IN ($placeholders) AND tipo_torneo = 'eliminatoria'
+        ");
+        $stmt->execute($fase_ids);
+        $fecha_ids_eliminar = array_merge($fecha_ids_eliminar, $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+    $fecha_ids_eliminar = array_unique($fecha_ids_eliminar);
+    
+    // 1. Eliminar partidos de zonas (tabla partidos)
+    if (!empty($zona_ids)) {
+        $placeholders = str_repeat('?,', count($zona_ids) - 1) . '?';
+        $stmt = $db->prepare("
+            DELETE FROM partidos 
+            WHERE zona_id IN ($placeholders) AND tipo_torneo = 'zona'
+        ");
+        $stmt->execute($zona_ids);
+    }
+    
+    // 2. Eliminar partidos eliminatorios (tabla partidos)
+    if (!empty($fase_ids)) {
+        $placeholders = str_repeat('?,', count($fase_ids) - 1) . '?';
+        $stmt = $db->prepare("
+            DELETE FROM partidos 
+            WHERE fase_eliminatoria_id IN ($placeholders) AND tipo_torneo = 'eliminatoria'
+        ");
+        $stmt->execute($fase_ids);
+    }
+    
+    // 3. Eliminar partidos de zonas (tabla partidos_zona - si existe)
+    if (!empty($zona_ids)) {
+        $placeholders = str_repeat('?,', count($zona_ids) - 1) . '?';
+        try {
+            $stmt = $db->prepare("
+                DELETE FROM partidos_zona 
+                WHERE zona_id IN ($placeholders)
+            ");
+            $stmt->execute($zona_ids);
+        } catch (Exception $e) {
+            // Tabla puede no existir, continuar
+        }
+    }
+    
+    // 4. Eliminar partidos eliminatorios (tabla partidos_eliminatorios - si existe)
+    if (!empty($fase_ids)) {
+        $placeholders = str_repeat('?,', count($fase_ids) - 1) . '?';
+        try {
+            $stmt = $db->prepare("
+                DELETE FROM partidos_eliminatorios 
+                WHERE fase_id IN ($placeholders)
+            ");
+            $stmt->execute($fase_ids);
+        } catch (Exception $e) {
+            // Tabla puede no existir, continuar
+        }
+    }
+    
+    // 5. Eliminar fechas relacionadas (solo las que no tienen más partidos)
+    if (!empty($fecha_ids_eliminar)) {
+        // Verificar que las fechas no tengan otros partidos
+        $placeholders = str_repeat('?,', count($fecha_ids_eliminar) - 1) . '?';
+        $stmt = $db->prepare("
+            SELECT DISTINCT fecha_id 
+            FROM partidos 
+            WHERE fecha_id IN ($placeholders)
+        ");
+        $stmt->execute($fecha_ids_eliminar);
+        $fechas_con_partidos = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        // Solo eliminar fechas que no tienen partidos
+        $fechas_a_eliminar = array_diff($fecha_ids_eliminar, $fechas_con_partidos);
+        
+        if (!empty($fechas_a_eliminar)) {
+            $placeholders = str_repeat('?,', count($fechas_a_eliminar) - 1) . '?';
+            $stmt = $db->prepare("
+                DELETE FROM fechas 
+                WHERE id IN ($placeholders) AND (tipo_fecha = 'zona' OR tipo_fecha = 'eliminatoria')
+            ");
+            $stmt->execute(array_values($fechas_a_eliminar));
+        }
+    }
     
     // Obtener zonas
     $stmt = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");

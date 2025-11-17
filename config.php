@@ -114,6 +114,84 @@ function generateCode($length = 6) {
     return substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'), 0, $length);
 }
 
+// ===================== FUNCIONES DE TORNEOS =====================
+function getCampeonatoIdByEquipo($equipo_id, $db = null) {
+    if (empty($equipo_id)) {
+        return null;
+    }
+
+    $db = $db ?: Database::getInstance()->getConnection();
+    $stmt = $db->prepare("
+        SELECT camp.id
+        FROM equipos e
+        JOIN categorias c ON e.categoria_id = c.id
+        JOIN campeonatos camp ON c.campeonato_id = camp.id
+        WHERE e.id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$equipo_id]);
+    $campeonato_id = $stmt->fetchColumn();
+
+    return $campeonato_id ? (int)$campeonato_id : null;
+}
+
+function jugadorExisteEnCampeonato($dni, $campeonato_id, $excludeJugadorId = null, $db = null) {
+    if (empty($dni) || empty($campeonato_id)) {
+        return false;
+    }
+
+    $db = $db ?: Database::getInstance()->getConnection();
+    $sql = "
+        SELECT j.*
+        FROM jugadores j
+        JOIN equipos e ON j.equipo_id = e.id
+        JOIN categorias c ON e.categoria_id = c.id
+        WHERE j.dni = ?
+          AND c.campeonato_id = ?
+    ";
+    $params = [$dni, $campeonato_id];
+
+    if (!empty($excludeJugadorId)) {
+        $sql .= " AND j.id <> ? ";
+        $params[] = $excludeJugadorId;
+    }
+
+    $sql .= " ORDER BY j.created_at DESC LIMIT 1";
+
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $jugador = $stmt->fetch();
+
+    return $jugador ?: false;
+}
+
+function getTeamInitials($nombre, $maxLetters = 3) {
+    $nombre = trim((string)$nombre);
+    if ($nombre === '') {
+        return '';
+    }
+
+    $stopWords = ['DE','DEL','LA','LAS','LOS','EL','Y','SAN','SANTA','CLUB','ATLETICO','FC','F.C','CF','C.F','SPORTIVO'];
+    $words = preg_split('/\s+/u', $nombre);
+    $initials = '';
+
+    foreach ($words as $word) {
+        $clean = preg_replace('/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/u', '', $word);
+        if ($clean === '') continue;
+        $upper = mb_strtoupper($clean, 'UTF-8');
+        if (in_array($upper, $stopWords, true)) continue;
+        $initials .= mb_substr($upper, 0, 1, 'UTF-8');
+        if (mb_strlen($initials, 'UTF-8') >= $maxLetters) break;
+    }
+
+    if ($initials === '') {
+        $fallback = mb_strtoupper(preg_replace('/[^A-Za-zÁÉÍÓÚÜÑ]/u', '', $nombre), 'UTF-8');
+        $initials = mb_substr($fallback, 0, min($maxLetters, mb_strlen($fallback, 'UTF-8')), 'UTF-8');
+    }
+
+    return $initials;
+}
+
 // ===================== SUBIDA DE ARCHIVOS =====================
 function uploadFile($file, $folder = 'general') {
     if (empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) return false;
@@ -196,17 +274,28 @@ function saveEventosPartido($partido_id, $eventos) {
 }
 
 // ===================== INCLUIR SISTEMA AUTOMÁTICO DE SANCIONES =====================
-$sanciones_file = __DIR__ . '/include/sanciones_functions.php';
+// Intentar múltiples ubicaciones conocidas, según despliegue
+$sanciones_candidates = [
+    __DIR__ . '/include/sanciones_functions.php',        // /public_html/include
+    __DIR__ . '/admin/include/sanciones_functions.php',  // /public_html/admin/include
+];
 
-if (file_exists($sanciones_file)) {
-    require_once $sanciones_file;
-    
-    // Verificar que las funciones se cargaron correctamente
+$sanciones_cargado = false;
+foreach ($sanciones_candidates as $sf) {
+    if (file_exists($sf)) {
+        require_once $sf;
+        $sanciones_cargado = true;
+        break;
+    }
+}
+
+if ($sanciones_cargado) {
     if (!function_exists('cumplirSancionesAutomaticas')) {
         error_log("ERROR CRÍTICO: sanciones_functions.php se incluyó pero las funciones no están disponibles");
     }
 } else {
-    error_log("ADVERTENCIA: No se encontró include/sanciones_functions.php en: " . $sanciones_file);
+    error_log("ADVERTENCIA: No se encontró sanciones_functions.php en ninguna ruta candidata");
+    error_log("Rutas probadas: " . implode(' | ', $sanciones_candidates));
     error_log("Directorio actual: " . __DIR__);
 }
 ?>
