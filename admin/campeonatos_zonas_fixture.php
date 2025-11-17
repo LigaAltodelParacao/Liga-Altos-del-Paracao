@@ -45,6 +45,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generar_fixture'])) {
         $dias_entre_fechas = (int)($_POST['dias_entre_fechas'] ?? 7);
         $tipo_fixture = $_POST['tipo_fixture'] ?? 'todos_contra_todos';
         
+        // Obtener configuración de zonas por día
+        $zonas_por_dia = [];
+        if (!empty($_POST['zonas_dias']) && is_array($_POST['zonas_dias'])) {
+            foreach ($_POST['zonas_dias'] as $zona_id => $dia_semana) {
+                if (!empty($dia_semana) && $dia_semana != '') {
+                    $zonas_por_dia[$zona_id] = $dia_semana;
+                }
+            }
+        }
+        
         // ========== LIMPIAR FIXTURE ANTERIOR ==========
         // Obtener todas las zonas del formato
         $stmt = $db->prepare("SELECT id FROM zonas WHERE formato_id = ?");
@@ -100,14 +110,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generar_fixture'])) {
             }
         }
         
-        // 4. Eliminar fases eliminatorias (opcional - comentado por si se quieren mantener)
-        // Si se quiere eliminar también las fases eliminatorias descomentar esto:
-        // if (!empty($fase_ids)) {
-        //     $placeholders = str_repeat('?,', count($fase_ids) - 1) . '?';
-        //     $stmt = $db->prepare("DELETE FROM fases_eliminatorias WHERE id IN ($placeholders)");
-        //     $stmt->execute($fase_ids);
-        // }
-        
         // ========== GENERAR NUEVO FIXTURE ==========
         // Obtener zonas
         $stmt = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
@@ -129,14 +131,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generar_fixture'])) {
             }
         }
         
-        // Generar fixture para cada zona
+        // Generar fixture para cada zona con su día asignado
         $partidos_generados = 0;
+        // Mapeo de días: PHP usa 0=domingo, 1=lunes, ..., 6=sábado
+        $dias_semana = [
+            'lunes' => 1, 
+            'martes' => 2, 
+            'miercoles' => 3, 
+            'jueves' => 4, 
+            'viernes' => 5, 
+            'sabado' => 6, 
+            'domingo' => 0
+        ];
+        
         foreach ($zonas as $zona) {
-            // Calcular fecha de inicio para esta zona
-            $fecha_zona = new DateTime($fecha_inicio);
+            // Calcular fecha de inicio para esta zona basada en el día asignado
+            $fecha_base = new DateTime($fecha_inicio);
+            
+            // Si la zona tiene un día asignado, calcular la fecha del primer día de esa zona
+            if (!empty($zonas_por_dia[$zona['id']])) {
+                $dia_asignado = $zonas_por_dia[$zona['id']];
+                $dia_deseado = $dias_semana[$dia_asignado] ?? 1;
+                $dia_actual = (int)$fecha_base->format('w'); // 0=domingo, 1=lunes, etc.
+                
+                // Calcular días a sumar para llegar al día deseado
+                if ($dia_actual != $dia_deseado) {
+                    $dias_a_sumar = ($dia_deseado - $dia_actual + 7) % 7;
+                    if ($dias_a_sumar == 0) {
+                        $dias_a_sumar = 7; // Si es el mismo día, usar la siguiente semana
+                    }
+                    $fecha_base->modify("+{$dias_a_sumar} days");
+                }
+            }
             
             // Generar fixture
-            generarFixtureZona($zona['id'], $db, $fecha_zona->format('Y-m-d'), $dias_entre_fechas);
+            generarFixtureZona($zona['id'], $db, $fecha_base->format('Y-m-d'), $dias_entre_fechas);
             
             // Contar partidos generados
             $stmt = $db->prepare("SELECT COUNT(*) as total FROM partidos WHERE zona_id = ? AND tipo_torneo = 'zona'");
@@ -282,6 +311,40 @@ $canchas = $db->query("SELECT * FROM canchas WHERE activa = 1 ORDER BY nombre")-
                                     <input type="number" name="dias_entre_fechas" class="form-control" 
                                            value="7" min="1" required>
                                     <small class="text-muted">Días entre cada jornada</small>
+                                </div>
+                            </div>
+
+                            <!-- Selección de Días por Zona -->
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">
+                                    <i class="fas fa-calendar-week"></i> Asignar Días de Juego por Zona
+                                </label>
+                                <p class="text-muted small">
+                                    Selecciona el día de la semana en que jugará cada zona. Puedes dejar sin asignar si todas las zonas juegan el mismo día.
+                                </p>
+                                <div class="row">
+                                    <?php foreach ($zonas as $zona): ?>
+                                        <div class="col-md-6 mb-3">
+                                            <div class="card">
+                                                <div class="card-body p-3">
+                                                    <label class="form-label fw-bold mb-2">
+                                                        <?= htmlspecialchars($zona['nombre']) ?>
+                                                        <small class="text-muted">(<?= $zona['total_equipos'] ?> equipos)</small>
+                                                    </label>
+                                                    <select name="zonas_dias[<?= $zona['id'] ?>]" class="form-select">
+                                                        <option value="">Sin asignar (usa fecha de inicio)</option>
+                                                        <option value="lunes">Lunes</option>
+                                                        <option value="martes">Martes</option>
+                                                        <option value="miercoles">Miércoles</option>
+                                                        <option value="jueves">Jueves</option>
+                                                        <option value="viernes">Viernes</option>
+                                                        <option value="sabado">Sábado</option>
+                                                        <option value="domingo">Domingo</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
                                 </div>
                             </div>
 

@@ -180,11 +180,25 @@ $mas_rojas = $db->query($query_mas_rojas)->fetch();
 // RÉCORDS DE PARTIDOS
 // ====================================
 
-// Mayor goleada en la historia
+// Mayor goleada en la historia (solo victorias, no empates)
 $query_mayor_goleada = "
 SELECT 
-    el.nombre as equipo_ganador, el.logo as logo_ganador,
-    ev.nombre as equipo_perdedor, ev.logo as logo_perdedor,
+    CASE 
+        WHEN p.goles_local > p.goles_visitante THEN el.nombre
+        ELSE ev.nombre
+    END as equipo_ganador,
+    CASE 
+        WHEN p.goles_local > p.goles_visitante THEN el.logo
+        ELSE ev.logo
+    END as logo_ganador,
+    CASE 
+        WHEN p.goles_local < p.goles_visitante THEN el.nombre
+        ELSE ev.nombre
+    END as equipo_perdedor,
+    CASE 
+        WHEN p.goles_local < p.goles_visitante THEN el.logo
+        ELSE ev.logo
+    END as logo_perdedor,
     p.goles_local, p.goles_visitante,
     ABS(p.goles_local - p.goles_visitante) as diferencia,
     p.fecha_partido,
@@ -198,6 +212,7 @@ LEFT JOIN canchas c ON p.cancha_id = c.id
 WHERE p.estado = 'finalizado' 
 AND p.goles_local IS NOT NULL 
 AND p.goles_visitante IS NOT NULL
+AND p.goles_local != p.goles_visitante
 $filtro_campeonato
 ORDER BY diferencia DESC, (p.goles_local + p.goles_visitante) DESC
 LIMIT 1

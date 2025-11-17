@@ -409,7 +409,7 @@ if (!empty($categoria_ids)) {
 
     // Goleadores
     $sql = "
-        SELECT j.id as jugador_id, j.apellido_nombre, e.nombre as equipo, COUNT(ev.id) as goles
+        SELECT j.id as jugador_id, j.apellido_nombre, j.foto, e.nombre as equipo, e.logo, COUNT(ev.id) as goles
         FROM eventos_partido ev
         JOIN partidos p ON ev.partido_id = p.id
         JOIN fechas f ON p.fecha_id = f.id
@@ -418,7 +418,7 @@ if (!empty($categoria_ids)) {
         WHERE ev.tipo_evento = 'gol' 
           AND f.categoria_id IN ($placeholder_cat)
           AND (p.tipo_torneo = 'zona' OR p.tipo_torneo = 'eliminatoria')
-        GROUP BY j.id, j.apellido_nombre, e.nombre
+        GROUP BY j.id, j.apellido_nombre, j.foto, e.nombre, e.logo
         HAVING goles > 0
         ORDER BY goles DESC, j.apellido_nombre ASC
         LIMIT 50
@@ -2218,11 +2218,43 @@ if ($campeonato) {
                                                         <span class="badge <?= $pos <= 3 ? 'bg-warning' : 'bg-secondary' ?> me-2">
                                                             <?= $pos++ ?>
                                                         </span>
+                                                        <?php if (!empty($g['foto'])): ?>
+                                                            <img src="../uploads/<?= htmlspecialchars($g['foto']) ?>" 
+                                                                 alt="Foto" class="me-2 rounded-circle" 
+                                                                 width="30" height="30" 
+                                                                 style="object-fit: cover;">
+                                                        <?php else: ?>
+                                                            <div class="bg-secondary rounded-circle me-2 d-flex align-items-center justify-content-center" 
+                                                                 style="width: 30px; height: 30px;">
+                                                                <i class="fas fa-user text-white"></i>
+                                                            </div>
+                                                        <?php endif; ?>
                                                         <span class="fw-medium"><?= htmlspecialchars($g['apellido_nombre']) ?></span>
                                                     </div>
-                                                    <small class="text-muted d-md-none"><?= htmlspecialchars($g['equipo']) ?></small>
+                                                    <small class="text-muted d-md-none">
+                                                        <?php if (!empty($g['logo'])): ?>
+                                                            <img src="../uploads/<?= htmlspecialchars($g['logo']) ?>" 
+                                                                 alt="Logo" class="me-1" width="16" height="16" 
+                                                                 style="object-fit: cover; border-radius: 50%;">
+                                                        <?php endif; ?>
+                                                        <?= htmlspecialchars($g['equipo']) ?>
+                                                    </small>
                                                 </td>
-                                                <td class="text-muted d-none-mobile"><?= htmlspecialchars($g['equipo']) ?></td>
+                                                <td class="d-none-mobile">
+                                                    <div class="d-flex align-items-center">
+                                                        <?php if (!empty($g['logo'])): ?>
+                                                            <img src="../uploads/<?= htmlspecialchars($g['logo']) ?>" 
+                                                                 alt="Logo" class="me-2" width="24" height="24" 
+                                                                 style="object-fit: cover; border-radius: 50%;">
+                                                        <?php else: ?>
+                                                            <div class="bg-secondary rounded-circle me-2 d-flex align-items-center justify-content-center" 
+                                                                 style="width: 24px; height: 24px;">
+                                                                <i class="fas fa-shield-alt text-white" style="font-size: 0.7rem;"></i>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                        <span class="text-muted"><?= htmlspecialchars($g['equipo']) ?></span>
+                                                    </div>
+                                                </td>
                                                 <td>
                                                     <span class="badge bg-success">
                                                         <i class="fas fa-futbol me-1"></i>

@@ -288,6 +288,18 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
         $equipo_actual = $grupo[$i - 1];
         $equipo_siguiente = $grupo[$i];
         
+        // PRIMERO: Verificar que tengan los mismos puntos totales (deben estar en el mismo grupo de puntos)
+        $mismo_puntos = ($equipo_actual['puntos'] ?? 0) == ($equipo_siguiente['puntos'] ?? 0);
+        
+        if (!$mismo_puntos) {
+            // Si no tienen los mismos puntos, no pueden estar empatados
+            if (count($grupo_actual) > 1) {
+                $grupos_empate_final[] = $grupo_actual;
+            }
+            $grupo_actual = [$equipo_siguiente];
+            continue;
+        }
+        
         // Comparar todos los criterios de desempate
         $stats_actual = $equipo_actual['stats_directos'] ?? ['puntos' => 0, 'dif' => 0, 'gf' => 0, 'goles_visitante' => 0];
         $stats_siguiente = $equipo_siguiente['stats_directos'] ?? ['puntos' => 0, 'dif' => 0, 'gf' => 0, 'goles_visitante' => 0];
@@ -298,9 +310,11 @@ function desempatarPorEnfrentamientosDirectos($grupo, $zona_id, $db) {
         $mismo_gv_directos = ($stats_actual['goles_visitante'] ?? 0) == ($stats_siguiente['goles_visitante'] ?? 0);
         $mismas_victorias = ($equipo_actual['partidos_ganados'] ?? 0) == ($equipo_siguiente['partidos_ganados'] ?? 0);
         $mismo_fairplay = ($equipo_actual['puntos_fairplay'] ?? 0) == ($equipo_siguiente['puntos_fairplay'] ?? 0);
+        $misma_diferencia_gol = ($equipo_actual['diferencia_gol'] ?? 0) == ($equipo_siguiente['diferencia_gol'] ?? 0);
+        $mismo_goles_favor = ($equipo_actual['goles_favor'] ?? 0) == ($equipo_siguiente['goles_favor'] ?? 0);
         
-        // Si están empatados en todos los criterios, agregar al grupo actual
-        if ($mismo_puntos_directos && $misma_dif_directos && $mismo_gf_directos && $mismo_gv_directos && $mismas_victorias && $mismo_fairplay) {
+        // Si están empatados en TODOS los criterios (puntos, diferencia, goles a favor, enfrentamiento directo, victorias, fairplay)
+        if ($mismo_puntos_directos && $misma_dif_directos && $mismo_gf_directos && $mismo_gv_directos && $mismas_victorias && $mismo_fairplay && $misma_diferencia_gol && $mismo_goles_favor) {
             $grupo_actual[] = $equipo_siguiente;
         } else {
             // Si hay empate en el grupo actual, guardarlo

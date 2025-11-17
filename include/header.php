@@ -72,27 +72,10 @@ try {
 				<li class="nav-item">
                     <a class="nav-link" href="<?php echo $public_path; ?>estadisticas_historicas.php">Estadisticas</a>
                 </li>
-                <?php
-                // Mostrar Torneo Nocturno solo si existe y está activo
-                try {
-                    if (class_exists('Database')) {
-                        $db = Database::getInstance()->getConnection();
-                        $stmtTN = $db->prepare("SELECT id FROM campeonatos WHERE activo = 1 AND nombre LIKE ? LIMIT 1");
-                        $stmtTN->execute(['%Torneo Nocturno%']);
-                        $torneoNocturno = $stmtTN->fetchColumn();
-                        if ($torneoNocturno): ?>
-                            <li class="nav-item">
+                <li class="nav-item">
                                 <a class="nav-link" href="<?php echo $public_path; ?>torneo_nocturno.php">Torneo Nocturno</a>
                             </li>
-                        <?php endif;
-                    }
-                } catch (Exception $e) { 
-                    // Silent fail for torneo nocturno
-                } catch (PDOException $e) {
-                    // Silent fail for torneo nocturno
-                }
-                ?>
-            </ul>
+                 </ul>
             <ul class="navbar-nav">
                 <?php if ($user_logged_in): ?>
                     <li class="nav-item">

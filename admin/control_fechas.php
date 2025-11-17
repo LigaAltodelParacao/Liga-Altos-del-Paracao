@@ -202,9 +202,68 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
 
             $db->commit();
+            
+            // Verificar si es un partido de torneo por zonas y si todos los partidos están finalizados
+            // para generar eliminatorias automáticamente
+            $mensaje_eliminatorias = '';
+            try {
+                $stmt = $db->prepare("
+                    SELECT p.zona_id, z.formato_id 
+                    FROM partidos p
+                    LEFT JOIN zonas z ON p.zona_id = z.id
+                    WHERE p.id = ? AND p.tipo_torneo = 'zona'
+                ");
+                $stmt->execute([$partido_id]);
+                $partido_zona = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($partido_zona && $partido_zona['formato_id']) {
+                    require_once __DIR__ . '/funciones_torneos_zonas.php';
+                    
+                    if (function_exists('todosPartidosGruposFinalizados') && 
+                        todosPartidosGruposFinalizados($partido_zona['formato_id'], $db)) {
+                        
+                        // Recalcular todas las tablas para detectar empates pendientes
+                        require_once __DIR__ . '/include/desempate_functions.php';
+                        $stmt = $db->prepare("SELECT id FROM zonas WHERE formato_id = ?");
+                        $stmt->execute([$partido_zona['formato_id']]);
+                        $zonas_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                        
+                        foreach ($zonas_ids as $zona_id) {
+                            if (function_exists('calcularTablaPosicionesConDesempate')) {
+                                calcularTablaPosicionesConDesempate($zona_id, $db);
+                            }
+                        }
+                        
+                        // Verificar si hay empates pendientes
+                        if (function_exists('hayEmpatesPendientes') && 
+                            function_exists('obtenerEmpatesPendientes')) {
+                            if (hayEmpatesPendientes($partido_zona['formato_id'], $db)) {
+                                $empates = obtenerEmpatesPendientes($partido_zona['formato_id'], $db);
+                                $mensaje_eliminatorias = ' ¡Fase de grupos completada! Sin embargo, hay ' . count($empates) . ' empate(s) pendiente(s) de resolución por sorteo.';
+                            } else {
+                                // Intentar generar eliminatorias automáticamente
+                                if (function_exists('generarFixtureEliminatorias')) {
+                                    try {
+                                        generarFixtureEliminatorias($partido_zona['formato_id'], $db);
+                                        $mensaje_eliminatorias = ' ¡Fase de grupos completada! Se generaron automáticamente los partidos eliminatorios.';
+                                    } catch (Exception $e) {
+                                        $mensaje_eliminatorias = ' ' . $e->getMessage();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                // No fallar si hay error en la generación de eliminatorias
+                error_log("Error al verificar/generar eliminatorias: " . $e->getMessage());
+            }
+            
             $message = $action == 'cargar_resultado' 
                 ? 'Resultado y sanciones guardadas correctamente' 
                 : 'Resultado editado y sanciones actualizadas';
+            $message .= $mensaje_eliminatorias;
+            
             if ($sanciones_actualizadas > 0) {
                 $message .= ". ✅ Se actualizaron automáticamente $sanciones_actualizadas sanción(es).";
                 $finalizadas = array_filter($detalle_sanciones, fn($d) => $d['finalizada'] ?? false);
@@ -1101,7 +1160,7 @@ if ($es_torneo_zonas && $categoria_id) {
             cargarJugadoresEquipo(equipoVisitante, 'visitante');
         }
         
-        function editarPartido(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante, golesLocal, golesVisitante, observaciones) {
+        async function editarPartido(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante, golesLocal, golesVisitante, observaciones) {
             resetModal();
             document.getElementById('modal_action').value = 'editar_resultado';
             document.getElementById('modal_title').textContent = 'Editar Resultado';
@@ -1110,9 +1169,13 @@ if ($es_torneo_zonas && $categoria_id) {
             document.getElementById('goles_local').value = golesLocal;
             document.getElementById('goles_visitante').value = golesVisitante;
             document.getElementById('observaciones').value = observaciones;
-            cargarJugadoresEquipo(equipoLocal, 'local', true);
-            cargarJugadoresEquipo(equipoVisitante, 'visitante', true);
-            loadExistingEvents(id);
+            // Esperar a que se carguen los jugadores antes de cargar eventos
+            await Promise.all([
+                cargarJugadoresEquipo(equipoLocal, 'local', true),
+                cargarJugadoresEquipo(equipoVisitante, 'visitante', true)
+            ]);
+            // Ahora cargar eventos después de que los jugadores estén cargados
+            await loadExistingEvents(id);
         }
         
         function fillModalData(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante) {
@@ -1172,6 +1235,7 @@ if ($es_torneo_zonas && $categoria_id) {
             } catch (error) {
                 console.error('Error:', error);
                 container.innerHTML = '<div class="text-center text-danger py-3">Error al cargar jugadores</div>';
+                throw error; // Re-lanzar para que Promise.all detecte el error
             }
         }
         
@@ -1225,15 +1289,18 @@ if ($es_torneo_zonas && $categoria_id) {
                 const display = numero ? `#${numero} - ${j.apellido_nombre}` : j.apellido_nombre;
                 options += `<option value="${j.id}" data-numero="${numero}">${display}</option>`;
             });
-            const index = container.children.length;
+            // Usar timestamp para asegurar índices únicos, incluso si se eliminan elementos
+            const index = Date.now() + Math.random();
             div.innerHTML = `
                 <div class="col-2">
                     <input type="number" class="form-control text-center" placeholder="N°" 
-                           onchange="seleccionarJugadorPorNumero(this, 'gol', ${index}, '${lado}')">
+                           onchange="seleccionarJugadorPorNumero(this, 'gol', '${index}', '${lado}')">
                 </div>
                 <div class="col-8">
                     <select class="form-select" name="goles[${index}][jugador_id]" 
-                            id="gol_${lado}_${index}" required>
+                            id="gol_${lado}_${index}" 
+                            data-lado="${lado}"
+                            onchange="updateGoles('${lado}')" required>
                         ${options}
                     </select>
                 </div>
@@ -1297,6 +1364,7 @@ if ($es_torneo_zonas && $categoria_id) {
                 if (option.dataset.numero == numero) {
                     select.value = option.value;
                     select.classList.remove('is-invalid');
+                    updateGoles(lado);
                     return;
                 }
             }
@@ -1315,8 +1383,16 @@ if ($es_torneo_zonas && $categoria_id) {
         
         function updateGoles(lado) {
             const container = document.getElementById('goles' + lado.charAt(0).toUpperCase() + lado.slice(1) + 'Container');
-            const goles = container.querySelectorAll('.gol-item').length;
-            document.getElementById('goles_' + lado).value = goles;
+            // Contar solo los goles que tienen un jugador seleccionado
+            const golesItems = container.querySelectorAll('.gol-item');
+            let count = 0;
+            golesItems.forEach(item => {
+                const select = item.querySelector('select[name*="jugador_id"]');
+                if (select && select.value && select.value !== '') {
+                    count++;
+                }
+            });
+            document.getElementById('goles_' + lado).value = count;
         }
         
         async function loadExistingEvents(partidoId) {
@@ -1325,6 +1401,7 @@ if ($es_torneo_zonas && $categoria_id) {
                 if (!response.ok) throw new Error('Error al cargar eventos');
                 const data = await response.json();
                 
+                // Cargar números de camiseta de jugadores que participaron
                 if (data.jugadores_partido && Array.isArray(data.jugadores_partido)) {
                     data.jugadores_partido.forEach(jp => {
                         const lado = jp.equipo_id == document.getElementById('equipo_local_id').value ? 'local' : 'visitante';
@@ -1336,6 +1413,7 @@ if ($es_torneo_zonas && $categoria_id) {
                     });
                 }
                 
+                // Cargar TODOS los goles (incluyendo múltiples del mismo jugador)
                 if (data.goles && Array.isArray(data.goles)) {
                     for (const evento of data.goles) {
                         const lado = evento.equipo_id == document.getElementById('equipo_local_id').value ? 'local' : 'visitante';
@@ -1344,26 +1422,44 @@ if ($es_torneo_zonas && $categoria_id) {
                         const ultimoSelect = container.querySelector('.gol-item:last-child select[name*="jugador_id"]');
                         if (ultimoSelect) {
                             ultimoSelect.value = evento.jugador_id;
+                            // Disparar evento change para actualizar contador
+                            ultimoSelect.dispatchEvent(new Event('change'));
                         }
                     }
+                    // Actualizar contadores de goles después de cargar todos
+                    updateGoles('local');
+                    updateGoles('visitante');
                 }
                 
+                // Cargar todas las tarjetas
                 if (data.tarjetas && Array.isArray(data.tarjetas)) {
                     for (const evento of data.tarjetas) {
-                        const lado = evento.equipo_id == document.getElementById('equipo_local_id').value ? 'local' : 'visitante';
+                        // Comparar como números para evitar problemas de tipo
+                        const equipoLocalId = parseInt(document.getElementById('equipo_local_id').value);
+                        const eventoEquipoId = parseInt(evento.equipo_id);
+                        const lado = eventoEquipoId === equipoLocalId ? 'local' : 'visitante';
                         await addTarjeta(lado);
+                        // Esperar un momento para que el DOM se actualice
+                        await new Promise(resolve => setTimeout(resolve, 50));
                         const container = document.getElementById('tarjetas' + lado.charAt(0).toUpperCase() + lado.slice(1) + 'Container');
                         const ultimaFila = container.querySelector('.tarjeta-item:last-child');
                         if (ultimaFila) {
                             const selectJugador = ultimaFila.querySelector('select[name*="jugador_id"]');
                             const selectTipo = ultimaFila.querySelector('select[name*="tipo"]');
-                            if (selectJugador) selectJugador.value = evento.jugador_id;
-                            if (selectTipo) selectTipo.value = evento.tipo_evento;
+                            if (selectJugador) {
+                                selectJugador.value = evento.jugador_id;
+                                selectJugador.dispatchEvent(new Event('change'));
+                            }
+                            if (selectTipo) {
+                                selectTipo.value = evento.tipo_evento;
+                                selectTipo.dispatchEvent(new Event('change'));
+                            }
                         }
                     }
                 }
             } catch (error) {
                 console.error('Error cargando eventos:', error);
+                alert('Error al cargar los eventos del partido. Por favor, recarga la página.');
             }
         }
         

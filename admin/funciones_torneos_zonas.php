@@ -27,7 +27,7 @@ function calcularDistribucionZonas($total_equipos, $num_zonas) {
  * Genera el fixture de una zona (todos contra todos)
  * Usa algoritmo Round Robin y crea partidos en la tabla partidos con fechas
  */
-function generarFixtureZona($zona_id, $db) {
+function generarFixtureZona($zona_id, $db, $fecha_inicio = null, $dias_entre_fechas = 7) {
     try {
         // Obtener información de la zona y categoría
         $stmt = $db->prepare("
@@ -64,93 +64,104 @@ function generarFixtureZona($zona_id, $db) {
             return false;
         }
     
-    // Si hay número impar, agregar "BYE" (no se crea partido)
-    $es_impar = $num_equipos % 2 != 0;
-    if ($es_impar) {
-        $equipos[] = null; // BYE
-        $num_equipos++;
-    }
-    
-    // Algoritmo Round Robin correcto
-    $jornadas = $num_equipos - 1;
-    
-    // Crear fechas y partidos para cada jornada
-    for ($jornada = 1; $jornada <= $jornadas; $jornada++) {
-        // Crear fecha para esta jornada
-        $stmt = $db->prepare("
-            INSERT INTO fechas (categoria_id, numero_fecha, tipo_fecha, zona_id, fecha_programada)
-            VALUES (?, ?, 'zona', ?, DATE_ADD(CURDATE(), INTERVAL ? DAY))
-        ");
-        $stmt->execute([
-            $zona_info['categoria_id'],
-            $jornada,
-            $zona_id,
-            ($jornada - 1) * 7 // Una semana entre jornadas
-        ]);
-        $fecha_id = $db->lastInsertId();
-        
-        // Calcular partidos de esta jornada usando Round Robin
-        $partidos_jornada = [];
-        
-        // Algoritmo Round Robin: el primer equipo juega contra el último
-        // Los demás se emparejan: segundo vs penúltimo, tercero vs antepenúltimo, etc.
-        for ($i = 0; $i < floor($num_equipos / 2); $i++) {
-            $idx1 = $i;
-            $idx2 = $num_equipos - 1 - $i;
-            
-            $equipo1 = $equipos[$idx1];
-            $equipo2 = $equipos[$idx2];
-            
-            // Si alguno es BYE, no crear partido
-            if ($equipo1 === null || $equipo2 === null) {
-                continue;
-            }
-            
-            // Alternar local/visitante cada jornada
-            if ($jornada % 2 == 0) {
-                $partidos_jornada[] = [
-                    'local' => $equipo2,
-                    'visitante' => $equipo1
-                ];
-            } else {
-                $partidos_jornada[] = [
-                    'local' => $equipo1,
-                    'visitante' => $equipo2
-                ];
-            }
+        // Si hay número impar, agregar "BYE" (no se crea partido)
+        $es_impar = $num_equipos % 2 != 0;
+        if ($es_impar) {
+            $equipos[] = null; // BYE
+            $num_equipos++;
         }
         
-        // Crear partidos en la tabla partidos
-        foreach ($partidos_jornada as $partido) {
+        // Usar fecha de inicio proporcionada o fecha actual
+        if ($fecha_inicio) {
+            $fecha_base = new DateTime($fecha_inicio);
+        } else {
+            $fecha_base = new DateTime();
+        }
+        
+        // Algoritmo Round Robin correcto
+        $jornadas = $num_equipos - 1;
+        
+        // Crear fechas y partidos para cada jornada
+        for ($jornada = 1; $jornada <= $jornadas; $jornada++) {
+            // Calcular fecha de esta jornada
+            $fecha_jornada = clone $fecha_base;
+            $fecha_jornada->modify('+' . (($jornada - 1) * $dias_entre_fechas) . ' days');
+            
+            // Crear fecha para esta jornada
             $stmt = $db->prepare("
-                INSERT INTO partidos 
-                (fecha_id, equipo_local_id, equipo_visitante_id, zona_id, jornada_zona, 
-                 tipo_torneo, estado, fecha_partido)
-                VALUES (?, ?, ?, ?, ?, 'zona', 'pendiente', DATE_ADD(CURDATE(), INTERVAL ? DAY))
+                INSERT INTO fechas (categoria_id, numero_fecha, tipo_fecha, zona_id, fecha_programada)
+                VALUES (?, ?, 'zona', ?, ?)
             ");
             $stmt->execute([
-                $fecha_id,
-                $partido['local'],
-                $partido['visitante'],
-                $zona_id,
+                $zona_info['categoria_id'],
                 $jornada,
-                ($jornada - 1) * 7
+                $zona_id,
+                $fecha_jornada->format('Y-m-d')
             ]);
+            $fecha_id = $db->lastInsertId();
+            
+            // Calcular partidos de esta jornada usando Round Robin
+            $partidos_jornada = [];
+            
+            // Algoritmo Round Robin: el primer equipo juega contra el último
+            // Los demás se emparejan: segundo vs penúltimo, tercero vs antepenúltimo, etc.
+            for ($i = 0; $i < floor($num_equipos / 2); $i++) {
+                $idx1 = $i;
+                $idx2 = $num_equipos - 1 - $i;
+                
+                $equipo1 = $equipos[$idx1];
+                $equipo2 = $equipos[$idx2];
+                
+                // Si alguno es BYE, no crear partido
+                if ($equipo1 === null || $equipo2 === null) {
+                    continue;
+                }
+                
+                // Alternar local/visitante cada jornada
+                if ($jornada % 2 == 0) {
+                    $partidos_jornada[] = [
+                        'local' => $equipo2,
+                        'visitante' => $equipo1
+                    ];
+                } else {
+                    $partidos_jornada[] = [
+                        'local' => $equipo1,
+                        'visitante' => $equipo2
+                    ];
+                }
+            }
+            
+            // Crear partidos en la tabla partidos
+            foreach ($partidos_jornada as $partido) {
+                $stmt = $db->prepare("
+                    INSERT INTO partidos 
+                    (fecha_id, equipo_local_id, equipo_visitante_id, zona_id, jornada_zona, 
+                     tipo_torneo, estado, fecha_partido)
+                    VALUES (?, ?, ?, ?, ?, 'zona', 'pendiente', ?)
+                ");
+                $stmt->execute([
+                    $fecha_id,
+                    $partido['local'],
+                    $partido['visitante'],
+                    $zona_id,
+                    $jornada,
+                    $fecha_jornada->format('Y-m-d')
+                ]);
+            }
+            
+            // Rotar equipos para la siguiente jornada (Round Robin estándar)
+            // El primer equipo queda fijo, rotamos el resto
+            if ($jornada < $jornadas) {
+                // Guardar el último elemento
+                $ultimo = array_pop($equipos);
+                // Insertar el último después del primero
+                array_splice($equipos, 1, 0, [$ultimo]);
+            }
         }
         
-        // Rotar equipos para la siguiente jornada (Round Robin estándar)
-        // El primer equipo queda fijo, rotamos el resto
-        if ($jornada < $jornadas) {
-            // Guardar el último elemento
-            $ultimo = array_pop($equipos);
-            // Insertar el último después del primero
-            array_splice($equipos, 1, 0, [$ultimo]);
-        }
-    }
-    
-    error_log("generarFixtureZona: Fixture generado exitosamente para zona_id=$zona_id con $num_equipos equipos y $jornadas jornadas");
-    return true;
-    
+        error_log("generarFixtureZona: Fixture generado exitosamente para zona_id=$zona_id con $num_equipos equipos y $jornadas jornadas");
+        return true;
+        
     } catch (Exception $e) {
         error_log("generarFixtureZona ERROR para zona_id=$zona_id: " . $e->getMessage());
         return false;

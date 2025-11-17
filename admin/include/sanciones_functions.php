@@ -13,6 +13,40 @@
  */
 function procesarEventosYCrearSanciones($partido_id, $db) {
     try {
+        // Obtener información del partido para determinar tipo_torneo y campeonato_id
+        $stmt = $db->prepare("
+            SELECT 
+                p.tipo_torneo,
+                COALESCE(
+                    (SELECT c.campeonato_id 
+                     FROM fechas f 
+                     JOIN categorias c ON f.categoria_id = c.id 
+                     WHERE f.id = p.fecha_id AND p.tipo_torneo = 'normal'),
+                    (SELECT cf.campeonato_id 
+                     FROM zonas z 
+                     JOIN campeonatos_formato cf ON z.formato_id = cf.id 
+                     WHERE z.id = p.zona_id AND p.tipo_torneo = 'zona'),
+                    (SELECT cf.campeonato_id 
+                     FROM fases_eliminatorias fe 
+                     JOIN campeonatos_formato cf ON fe.formato_id = cf.id 
+                     WHERE fe.id = p.fase_eliminatoria_id AND p.tipo_torneo = 'eliminatoria')
+                ) as campeonato_id
+            FROM partidos p
+            WHERE p.id = ?
+        ");
+        $stmt->execute([$partido_id]);
+        $partido_info = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$partido_info) {
+            return [
+                'success' => false,
+                'message' => 'Partido no encontrado'
+            ];
+        }
+        
+        $tipo_torneo = $partido_info['tipo_torneo'] ?? 'normal';
+        $campeonato_id = $partido_info['campeonato_id'] ?? null;
+        
         // Obtener todos los eventos del partido
         $stmt = $db->prepare("
             SELECT e.*, j.equipo_id, j.id as jugador_id_completo
@@ -27,45 +61,146 @@ function procesarEventosYCrearSanciones($partido_id, $db) {
         
         // Procesar tarjetas rojas directas
         foreach ($eventos as $evento) {
-            if ($evento['tipo_evento'] === 'roja' && empty($evento['observaciones'])) {
-                // Tarjeta roja directa
+            if ($evento['tipo_evento'] === 'roja' && (empty($evento['observaciones']) || strpos($evento['observaciones'], 'Doble amarilla') === false)) {
+                // Tarjeta roja directa (no por doble amarilla) - MÍNIMO 2 FECHAS
+                // Verificar si ya tiene sanción activa
                 $stmt = $db->prepare("
-                    INSERT INTO sanciones (jugador_id, tipo, partidos_suspension, descripcion, fecha_sancion)
-                    VALUES (?, 'roja_directa', 1, 'Tarjeta roja directa', CURDATE())
-                    ON DUPLICATE KEY UPDATE activa = 1
+                    SELECT id FROM sanciones 
+                    WHERE jugador_id = ? AND tipo = 'roja_directa' AND activa = 1 
+                    AND tipo_torneo = ? AND (campeonato_id = ? OR (campeonato_id IS NULL AND ? IS NULL))
                 ");
-                $stmt->execute([$evento['jugador_id_completo']]);
-                $sanciones_creadas[] = $evento['jugador_id_completo'];
+                $stmt->execute([$evento['jugador_id_completo'], $tipo_torneo, $campeonato_id, $campeonato_id]);
+                
+                if (!$stmt->fetch()) {
+                    // Obtener información del partido para guardar el partido_origen
+                    $stmt = $db->prepare("
+                        SELECT fecha_id, zona_id, fase_eliminatoria_id 
+                        FROM partidos 
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$partido_id]);
+                    $partido_data = $stmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    // Las tarjetas rojas directas tienen mínimo 2 fechas de suspensión
+                    // El tribunal de disciplina puede aumentar este número manualmente
+                    $partidos_suspension = 2;
+                    
+                    $stmt = $db->prepare("
+                        INSERT INTO sanciones (jugador_id, campeonato_id, tipo_torneo, tipo, partidos_suspension, partidos_cumplidos, descripcion, activa, fecha_sancion, partido_origen_id)
+                        VALUES (?, ?, ?, 'roja_directa', ?, 0, 'Tarjeta roja directa (mínimo 2 fechas)', 1, CURDATE(), ?)
+                    ");
+                    $stmt->execute([$evento['jugador_id_completo'], $campeonato_id, $tipo_torneo, $partidos_suspension, $partido_id]);
+                    $sanciones_creadas[] = $evento['jugador_id_completo'];
+                }
             }
         }
         
-        // Contar amarillas por jugador
+        // Contar amarillas por jugador en el campeonato/torneo
         $jugadores_amarillas = [];
         foreach ($eventos as $evento) {
             if ($evento['tipo_evento'] === 'amarilla') {
-                if (!isset($jugadores_amarillas[$evento['jugador_id_completo']])) {
-                    $jugadores_amarillas[$evento['jugador_id_completo']] = 0;
+                $jugador_id = $evento['jugador_id_completo'];
+                
+                // Contar amarillas acumuladas en el campeonato/torneo
+                if ($tipo_torneo === 'zona' || $tipo_torneo === 'eliminatoria') {
+                    // Para torneos por zonas, obtener el formato_id del partido
+                    $stmt = $db->prepare("
+                        SELECT 
+                            COALESCE(
+                                (SELECT formato_id FROM zonas WHERE id = (SELECT zona_id FROM partidos WHERE id = ?)),
+                                (SELECT formato_id FROM fases_eliminatorias WHERE id = (SELECT fase_eliminatoria_id FROM partidos WHERE id = ?))
+                            ) as formato_id
+                    ");
+                    $stmt->execute([$partido_id, $partido_id]);
+                    $formato_info = $stmt->fetch(PDO::FETCH_ASSOC);
+                    $formato_id = $formato_info['formato_id'] ?? null;
+                    
+                    if ($formato_id) {
+                        // Contar amarillas en todos los partidos del formato
+                        $stmt = $db->prepare("
+                            SELECT COUNT(*) as total
+                            FROM eventos_partido ep
+                            JOIN partidos p ON ep.partido_id = p.id
+                            LEFT JOIN zonas z ON p.zona_id = z.id
+                            LEFT JOIN fases_eliminatorias fe ON p.fase_eliminatoria_id = fe.id
+                            WHERE ep.jugador_id = ?
+                            AND ep.tipo_evento = 'amarilla'
+                            AND (z.formato_id = ? OR fe.formato_id = ?)
+                            AND ep.partido_id NOT IN (
+                                SELECT partido_id FROM eventos_partido 
+                                WHERE jugador_id = ? AND tipo_evento = 'roja' 
+                                AND observaciones LIKE '%Doble amarilla%'
+                            )
+                        ");
+                        $stmt->execute([$jugador_id, $formato_id, $formato_id, $jugador_id]);
+                    } else {
+                        // Si no se puede determinar el formato, usar consulta simple
+                        $stmt = $db->prepare("
+                            SELECT COUNT(*) as total
+                            FROM eventos_partido ep
+                            JOIN partidos p ON ep.partido_id = p.id
+                            WHERE ep.jugador_id = ?
+                            AND ep.tipo_evento = 'amarilla'
+                            AND p.tipo_torneo = ?
+                            AND ep.partido_id NOT IN (
+                                SELECT partido_id FROM eventos_partido 
+                                WHERE jugador_id = ? AND tipo_evento = 'roja' 
+                                AND observaciones LIKE '%Doble amarilla%'
+                            )
+                        ");
+                        $stmt->execute([$jugador_id, $tipo_torneo, $jugador_id]);
+                    }
+                } else {
+                    // Para torneos normales, contar amarillas en el campeonato
+                    $stmt = $db->prepare("
+                        SELECT COUNT(*) as total
+                        FROM eventos_partido ep
+                        JOIN partidos p ON ep.partido_id = p.id
+                        JOIN fechas f ON p.fecha_id = f.id
+                        JOIN categorias c ON f.categoria_id = c.id
+                        WHERE ep.jugador_id = ?
+                        AND ep.tipo_evento = 'amarilla'
+                        AND c.campeonato_id = ?
+                        AND ep.partido_id NOT IN (
+                            SELECT partido_id FROM eventos_partido 
+                            WHERE jugador_id = ? AND tipo_evento = 'roja' 
+                            AND observaciones LIKE '%Doble amarilla%'
+                        )
+                    ");
+                    $stmt->execute([$jugador_id, $campeonato_id, $jugador_id]);
                 }
-                $jugadores_amarillas[$evento['jugador_id_completo']]++;
+                
+                $result = $stmt->fetch(PDO::FETCH_ASSOC);
+                $jugadores_amarillas[$jugador_id] = (int)$result['total'];
             }
         }
         
         // Crear sanciones por 4 amarillas acumuladas
         foreach ($jugadores_amarillas as $jugador_id => $cantidad) {
-            if ($cantidad >= 4) {
+            if ($cantidad >= 4 && $cantidad % 4 == 0) {
                 // Verificar si ya tiene sanción activa por 4 amarillas
                 $stmt = $db->prepare("
                     SELECT id FROM sanciones 
                     WHERE jugador_id = ? AND tipo = 'amarillas_acumuladas' AND activa = 1
+                    AND tipo_torneo = ? AND (campeonato_id = ? OR (campeonato_id IS NULL AND ? IS NULL))
                 ");
-                $stmt->execute([$jugador_id]);
+                $stmt->execute([$jugador_id, $tipo_torneo, $campeonato_id, $campeonato_id]);
                 
                 if (!$stmt->fetch()) {
+                    // Obtener información del partido para guardar el partido_origen
                     $stmt = $db->prepare("
-                        INSERT INTO sanciones (jugador_id, tipo, partidos_suspension, descripcion, fecha_sancion)
-                        VALUES (?, 'amarillas_acumuladas', 1, '4 amarillas acumuladas en el campeonato', CURDATE())
+                        SELECT fecha_id, zona_id, fase_eliminatoria_id 
+                        FROM partidos 
+                        WHERE id = ?
                     ");
-                    $stmt->execute([$jugador_id]);
+                    $stmt->execute([$partido_id]);
+                    $partido_data = $stmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    $stmt = $db->prepare("
+                        INSERT INTO sanciones (jugador_id, campeonato_id, tipo_torneo, tipo, partidos_suspension, partidos_cumplidos, descripcion, activa, fecha_sancion, partido_origen_id)
+                        VALUES (?, ?, ?, 'amarillas_acumuladas', 1, 0, '4 amarillas acumuladas en el campeonato', 1, CURDATE(), ?)
+                    ");
+                    $stmt->execute([$jugador_id, $campeonato_id, $tipo_torneo, $partido_id]);
                     $sanciones_creadas[] = $jugador_id;
                 }
             }
@@ -90,9 +225,9 @@ function procesarEventosYCrearSanciones($partido_id, $db) {
  */
 function cumplirSancionesAutomaticas($partido_id, $db) {
     try {
-        // Obtener equipos que jugaron este partido
+        // Obtener equipos que jugaron este partido y su fecha
         $stmt = $db->prepare("
-            SELECT equipo_local_id, equipo_visitante_id 
+            SELECT equipo_local_id, equipo_visitante_id, fecha_id, zona_id, fase_eliminatoria_id, fecha_partido
             FROM partidos 
             WHERE id = ?
         ");
@@ -103,7 +238,8 @@ function cumplirSancionesAutomaticas($partido_id, $db) {
             return ['success' => false, 'message' => 'Partido no encontrado'];
         }
         
-        // Obtener sanciones activas
+        // Obtener sanciones activas EXCLUYENDO las que se crearon en este mismo partido
+        // Las sanciones solo se cumplen en partidos POSTERIORES al partido donde se generaron
         $stmt = $db->prepare("
             SELECT s.*, j.equipo_id, e.nombre as equipo_nombre, j.apellido_nombre
             FROM sanciones s
@@ -112,8 +248,9 @@ function cumplirSancionesAutomaticas($partido_id, $db) {
             WHERE s.activa = 1 
             AND j.equipo_id IN (?, ?)
             AND s.partidos_cumplidos < s.partidos_suspension
+            AND (s.partido_origen_id IS NULL OR s.partido_origen_id != ?)
         ");
-        $stmt->execute([$partido['equipo_local_id'], $partido['equipo_visitante_id']]);
+        $stmt->execute([$partido['equipo_local_id'], $partido['equipo_visitante_id'], $partido_id]);
         $sanciones_activas = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         $sanciones_actualizadas = 0;
@@ -131,6 +268,12 @@ function cumplirSancionesAutomaticas($partido_id, $db) {
             $resultado = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($resultado['participo'] > 0) {
+                // Verificar que la sanción no se haya creado en este mismo partido
+                // (doble verificación por si acaso)
+                if ($sancion['partido_origen_id'] == $partido_id) {
+                    continue; // No cumplir sanciones creadas en el mismo partido
+                }
+                
                 // Incrementar partidos cumplidos
                 $nuevo_cumplido = $sancion['partidos_cumplidos'] + 1;
                 $finalizada = $nuevo_cumplido >= $sancion['partidos_suspension'];
