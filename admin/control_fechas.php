@@ -126,34 +126,29 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt->execute([$partido_id]);
 
             // Registrar goles
-            // NOTA: El trigger trg_eventos_partido_campeonato determina automáticamente
-            // el tipo de torneo (largo/zonal) y establece es_torneo_zonal y campeonato_id
             if (!empty($_POST['goles']) && is_array($_POST['goles'])) {
                 foreach ($_POST['goles'] as $gol) {
                     if (!empty($gol['jugador_id'])) {
-                        // El trigger se encarga de establecer es_torneo_zonal y campeonato_id automáticamente
                         $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto) VALUES (?, ?, 'gol', 0)");
                         $stmt->execute([$partido_id, (int)$gol['jugador_id']]);
                     }
                 }
             }
 
-            // Registrar tarjetas
-            // NOTA: El trigger trg_eventos_partido_campeonato determina automáticamente
-            // el tipo de torneo (largo/zonal) y establece es_torneo_zonal y campeonato_id
+            // Registrar tarjetas (sin modificar - el sistema las procesará después)
             if (!empty($_POST['tarjetas']) && is_array($_POST['tarjetas'])) {
                 foreach ($_POST['tarjetas'] as $tarjeta) {
                     if (!empty($tarjeta['jugador_id']) && !empty($tarjeta['tipo'])) {
                         $jugador_id = (int)$tarjeta['jugador_id'];
                         $tipo = $tarjeta['tipo'];
-                        // El trigger se encarga de establecer es_torneo_zonal y campeonato_id automáticamente
                         $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto) VALUES (?, ?, ?, 0)");
                         $stmt->execute([$partido_id, $jugador_id, $tipo]);
                     }
                 }
             }
 
-            // === CORREGIR DOBLE AMARILLA (convertir a roja) ===
+            // === CORREGIR DOBLE AMARILLA AUTOMÁTICAMENTE ===
+            // Detectar jugadores con 2 amarillas en el mismo partido y convertirlas en roja por doble amarilla
             $stmt = $db->prepare("
                 SELECT jugador_id, COUNT(*) as amarillas
                 FROM eventos_partido
@@ -163,10 +158,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             ");
             $stmt->execute([$partido_id]);
             $dobles = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
             foreach ($dobles as $doble) {
+                // Eliminar las amarillas
                 $stmt = $db->prepare("DELETE FROM eventos_partido WHERE partido_id = ? AND jugador_id = ? AND tipo_evento = 'amarilla'");
                 $stmt->execute([$partido_id, $doble['jugador_id']]);
-                // El trigger se encarga de establecer es_torneo_zonal y campeonato_id automáticamente
+                
+                // Insertar roja por doble amarilla
                 $stmt = $db->prepare("INSERT INTO eventos_partido (partido_id, jugador_id, tipo_evento, minuto, observaciones) VALUES (?, ?, 'roja', 0, 'Doble amarilla')");
                 $stmt->execute([$partido_id, $doble['jugador_id']]);
             }
@@ -202,68 +200,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
 
             $db->commit();
-            
-            // Verificar si es un partido de torneo por zonas y si todos los partidos están finalizados
-            // para generar eliminatorias automáticamente
-            $mensaje_eliminatorias = '';
-            try {
-                $stmt = $db->prepare("
-                    SELECT p.zona_id, z.formato_id 
-                    FROM partidos p
-                    LEFT JOIN zonas z ON p.zona_id = z.id
-                    WHERE p.id = ? AND p.tipo_torneo = 'zona'
-                ");
-                $stmt->execute([$partido_id]);
-                $partido_zona = $stmt->fetch(PDO::FETCH_ASSOC);
-                
-                if ($partido_zona && $partido_zona['formato_id']) {
-                    require_once __DIR__ . '/funciones_torneos_zonas.php';
-                    
-                    if (function_exists('todosPartidosGruposFinalizados') && 
-                        todosPartidosGruposFinalizados($partido_zona['formato_id'], $db)) {
-                        
-                        // Recalcular todas las tablas para detectar empates pendientes
-                        require_once __DIR__ . '/include/desempate_functions.php';
-                        $stmt = $db->prepare("SELECT id FROM zonas WHERE formato_id = ?");
-                        $stmt->execute([$partido_zona['formato_id']]);
-                        $zonas_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
-                        
-                        foreach ($zonas_ids as $zona_id) {
-                            if (function_exists('calcularTablaPosicionesConDesempate')) {
-                                calcularTablaPosicionesConDesempate($zona_id, $db);
-                            }
-                        }
-                        
-                        // Verificar si hay empates pendientes
-                        if (function_exists('hayEmpatesPendientes') && 
-                            function_exists('obtenerEmpatesPendientes')) {
-                            if (hayEmpatesPendientes($partido_zona['formato_id'], $db)) {
-                                $empates = obtenerEmpatesPendientes($partido_zona['formato_id'], $db);
-                                $mensaje_eliminatorias = ' ¡Fase de grupos completada! Sin embargo, hay ' . count($empates) . ' empate(s) pendiente(s) de resolución por sorteo.';
-                            } else {
-                                // Intentar generar eliminatorias automáticamente
-                                if (function_exists('generarFixtureEliminatorias')) {
-                                    try {
-                                        generarFixtureEliminatorias($partido_zona['formato_id'], $db);
-                                        $mensaje_eliminatorias = ' ¡Fase de grupos completada! Se generaron automáticamente los partidos eliminatorios.';
-                                    } catch (Exception $e) {
-                                        $mensaje_eliminatorias = ' ' . $e->getMessage();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (Exception $e) {
-                // No fallar si hay error en la generación de eliminatorias
-                error_log("Error al verificar/generar eliminatorias: " . $e->getMessage());
-            }
-            
             $message = $action == 'cargar_resultado' 
                 ? 'Resultado y sanciones guardadas correctamente' 
                 : 'Resultado editado y sanciones actualizadas';
-            $message .= $mensaje_eliminatorias;
-            
             if ($sanciones_actualizadas > 0) {
                 $message .= ". ✅ Se actualizaron automáticamente $sanciones_actualizadas sanción(es).";
                 $finalizadas = array_filter($detalle_sanciones, fn($d) => $d['finalizada'] ?? false);
@@ -310,8 +249,13 @@ if ($campeonato_id) {
 $es_torneo_zonas = false;
 $formato_zonas = null;
 $zonas = [];
+$tiene_eliminatorias = false;
+$fase_actual = null;
+$fases = [];
+
 if ($categoria_id) {
     try {
+        // Verificar si existe un formato con zonas
         $stmt = $db->prepare("
             SELECT cf.* 
             FROM campeonatos_formato cf
@@ -323,9 +267,36 @@ if ($categoria_id) {
         
         if ($formato_zonas) {
             $es_torneo_zonas = true;
+            
+            // Cargar zonas
             $stmt = $db->prepare("SELECT * FROM zonas WHERE formato_id = ? ORDER BY orden");
             $stmt->execute([$formato_zonas['id']]);
             $zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Verificar si hay fases eliminatorias
+            $stmt = $db->prepare("
+                SELECT * 
+                FROM fases_eliminatorias 
+                WHERE formato_id = ? AND activa = 1
+                ORDER BY orden
+            ");
+            $stmt->execute([$formato_zonas['id']]);
+            $fases = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $tiene_eliminatorias = !empty($fases);
+            
+            // Detectar fase actual (si existe fase eliminatoria con partidos)
+            if ($tiene_eliminatorias) {
+                $stmt = $db->prepare("
+                    SELECT fe.nombre, fe.id, fe.orden
+                    FROM fases_eliminatorias fe
+                    WHERE fe.formato_id = ? AND fe.activa = 1
+                    AND EXISTS (SELECT 1 FROM partidos p WHERE p.fase_eliminatoria_id = fe.id)
+                    ORDER BY fe.orden DESC
+                    LIMIT 1
+                ");
+                $stmt->execute([$formato_zonas['id']]);
+                $fase_actual = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
         }
     } catch (PDOException $e) {
         if (empty($error)) $error = 'Error al cargar formato de zonas: ' . $e->getMessage();
@@ -334,9 +305,10 @@ if ($categoria_id) {
 
 $fechas_categoria = [];
 $jornada_seleccionada = $_GET['jornada'] ?? null;
+$fase_seleccionada = $_GET['fase'] ?? null;
 
 // Si es torneo de zonas, cargar jornadas únicas de todos los partidos
-if ($categoria_id && $es_torneo_zonas) {
+if ($categoria_id && $es_torneo_zonas && !$fase_seleccionada) {
     try {
         // Obtener todas las jornadas únicas de todos los partidos de zonas de esta categoría
         $stmt = $db->prepare("
@@ -378,8 +350,30 @@ if ($categoria_id && $es_torneo_zonas) {
 // Cargar partidos
 $partidos = [];
 $partidos_por_zona = [];
+$partidos_eliminatorias = [];
 
-if ($es_torneo_zonas && $categoria_id) {
+// Si se seleccionó una fase eliminatoria
+if ($fase_seleccionada && $es_torneo_zonas) {
+    try {
+        $stmt = $db->prepare("
+            SELECT p.*, el.nombre as equipo_local, ev.nombre as equipo_visitante,
+                   can.nombre as cancha, el.color_camiseta as color_local, ev.color_camiseta as color_visitante,
+                   el.id as equipo_local_id, ev.id as equipo_visitante_id,
+                   fe.nombre as fase_nombre
+            FROM partidos p
+            JOIN equipos el ON p.equipo_local_id = el.id
+            JOIN equipos ev ON p.equipo_visitante_id = ev.id
+            LEFT JOIN canchas can ON p.cancha_id = can.id
+            JOIN fases_eliminatorias fe ON p.fase_eliminatoria_id = fe.id
+            WHERE p.fase_eliminatoria_id = ?
+            ORDER BY p.fecha_partido ASC, p.hora_partido ASC
+        ");
+        $stmt->execute([$fase_seleccionada]);
+        $partidos_eliminatorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        if (empty($error)) $error = 'Error al cargar partidos de fase eliminatoria: ' . $e->getMessage();
+    }
+} elseif ($es_torneo_zonas && $categoria_id && !$fase_seleccionada) {
     try {
         // Si se seleccionó una jornada, filtrar por jornada
         if ($jornada_seleccionada) {
@@ -466,6 +460,75 @@ if ($es_torneo_zonas && $categoria_id) {
         if (empty($error)) $error = 'Error al cargar partidos: ' . $e->getMessage();
     }
 }
+
+// Función auxiliar para renderizar una tarjeta de partido
+function renderPartidoCard($p) {
+    $tiene_cancha_y_horario = !empty($p['cancha']) && !empty($p['hora_partido']);
+    $clase_card = 'partido-programado';
+    if (!$tiene_cancha_y_horario) $clase_card = 'partido-sin-datos';
+    elseif ($p['estado'] == 'finalizado') $clase_card = 'partido-finalizado';
+    elseif ($p['estado'] == 'en_curso') $clase_card = 'partido-en-juego';
+    ?>
+    <div class="col-md-6 mb-3">
+        <div class="card partido-card <?= $clase_card ?>">
+            <div class="card-header">
+                <?php if($p['estado'] == 'finalizado'): ?>
+                    <div class="resultado-final">
+                        <strong style="color:<?= $p['color_local'] ?>"><?= htmlspecialchars($p['equipo_local']) ?> <?= $p['goles_local'] ?></strong>
+                        <span class="mx-3">VS</span>
+                        <strong style="color:<?= $p['color_visitante'] ?>"><?= htmlspecialchars($p['equipo_visitante']) ?> <?= $p['goles_visitante'] ?></strong>
+                    </div>
+                <?php else: ?>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong style="color:<?= $p['color_local'] ?>"><?= htmlspecialchars($p['equipo_local']) ?></strong> vs 
+                            <strong style="color:<?= $p['color_visitante'] ?>"><?= htmlspecialchars($p['equipo_visitante']) ?></strong>
+                        </div>
+                        <span class="badge bg-<?= $p['estado']=='finalizado'?'success':($p['estado']=='en_curso'?'danger':'primary') ?>">
+                            <?= ucfirst(str_replace('_', ' ', $p['estado'])) ?>
+                        </span>
+                    </div>
+                <?php endif; ?>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-1">
+                            <i class="fas fa-calendar"></i> 
+                            <strong>Fecha:</strong> <?= $p['fecha_partido'] ? date('d/m/Y', strtotime($p['fecha_partido'])) : 'Sin fecha' ?>
+                        </p>
+                        <p class="mb-1">
+                            <i class="fas fa-map-marker-alt"></i> 
+                            <strong>Cancha:</strong> <?= $p['cancha'] ?: '<span class="text-danger">Sin asignar</span>' ?>
+                        </p>
+                        <p class="mb-1">
+                            <i class="fas fa-clock"></i> 
+                            <strong>Hora:</strong> <?= $p['hora_partido'] ? date('H:i', strtotime($p['hora_partido'])) : '<span class="text-danger">Sin horario</span>' ?>
+                        </p>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <?php if(!$tiene_cancha_y_horario): ?>
+                            <button class="btn btn-sm btn-disabled-info" disabled>
+                                <i class="fas fa-exclamation-triangle"></i> Sin Datos
+                            </button>
+                        <?php elseif($p['estado'] == 'finalizado'): ?>
+                            <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#modalResultado" 
+                                onclick="editarPartido(<?= $p['id'] ?>, <?= $p['equipo_local_id'] ?>, <?= $p['equipo_visitante_id'] ?>, '<?= addslashes($p['equipo_local']) ?>', '<?= addslashes($p['equipo_visitante']) ?>', <?= $p['goles_local'] ?>, <?= $p['goles_visitante'] ?>, '<?= addslashes($p['observaciones'] ?? '') ?>')">
+                                <i class="fas fa-edit"></i> Editar
+                            </button>
+                        <?php else: ?>
+                            <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalResultado" 
+                                onclick="cargarPartido(<?= $p['id'] ?>, <?= $p['equipo_local_id'] ?>, <?= $p['equipo_visitante_id'] ?>, '<?= addslashes($p['equipo_local']) ?>', '<?= addslashes($p['equipo_visitante']) ?>')">
+                                <i class="fas fa-plus"></i> Cargar Resultado
+                            </button>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -509,24 +572,6 @@ if ($es_torneo_zonas && $categoria_id) {
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
             border-radius: 8px;
             margin: 10px 0;
-        }
-        .eventos-equipo {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 10px;
-            margin-top: 10px;
-        }
-        .evento-gol {
-            color: #28a745;
-            margin-right: 10px;
-        }
-        .evento-amarilla {
-            color: #ffc107;
-            margin-right: 10px;
-        }
-        .evento-roja {
-            color: #dc3545;
-            margin-right: 10px;
         }
         .btn-disabled-info {
             background-color: #6c757d;
@@ -621,9 +666,11 @@ if ($es_torneo_zonas && $categoria_id) {
                         <li><strong>Sin números:</strong> Si NO cargas ningún número, se considera que TODOS los jugadores del equipo jugaron.</li>
                         <li><strong>Con números:</strong> Si cargas al menos un número, solo juegan los que tienen número asignado.</li>
                         <li><strong>Eventos:</strong> Puedes buscar por número o seleccionar directamente del listado.</li>
+                        <li><strong>Doble amarilla:</strong> El sistema detecta automáticamente 2 amarillas en el mismo partido y las convierte en roja por doble amarilla (1 fecha de suspensión).</li>
                     </ul>
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
+                
                 <!-- Filtros -->
                 <form method="GET" class="row g-2 mb-4">
                     <div class="col-md-3">
@@ -645,41 +692,80 @@ if ($es_torneo_zonas && $categoria_id) {
                         <input type="hidden" name="campeonato" value="<?= $campeonato_id ?>">
                     </div>
                     <?php endif; ?>
-                    <?php if($categoria_id): ?>
+                    
+                    <?php if($categoria_id && $es_torneo_zonas): ?>
                     <div class="col-md-3">
-                        <?php if($es_torneo_zonas): ?>
-                            <select name="jornada" class="form-select" onchange="this.form.submit()">
-                                <option value="">Seleccionar Jornada</option>
-                                <?php foreach($fechas_categoria as $f): ?>
-                                    <option value="<?= $f['jornada'] ?>" <?= $jornada_seleccionada==$f['jornada']?'selected':'' ?>>
-                                        Jornada <?= $f['numero_fecha'] ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        <?php else: ?>
-                            <select name="fecha" class="form-select" onchange="this.form.submit()">
-                                <option value="">Seleccionar Fecha</option>
-                                <?php foreach($fechas_categoria as $f): ?>
-                                    <option value="<?= $f['id'] ?>" <?= $fecha_id==$f['id']?'selected':'' ?>>
-                                        Fecha <?= $f['numero_fecha'] ?> (<?= date('d/m/Y', strtotime($f['fecha_programada'])) ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        <?php endif; ?>
+                        <select name="jornada" class="form-select" onchange="this.form.submit()">
+                            <option value="">Fase de Grupos - Todas las Jornadas</option>
+                            <?php foreach($fechas_categoria as $f): ?>
+                                <option value="<?= $f['jornada'] ?>" <?= $jornada_seleccionada==$f['jornada']?'selected':'' ?>>
+                                    Jornada <?= $f['numero_fecha'] ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <input type="hidden" name="campeonato" value="<?= $campeonato_id ?>">
+                        <input type="hidden" name="categoria" value="<?= $categoria_id ?>">
+                    </div>
+                    <?php if($tiene_eliminatorias): ?>
+                    <div class="col-md-3">
+                        <select name="fase" class="form-select" onchange="this.form.submit()">
+                            <option value="">Ver Fase de Grupos</option>
+                            <?php foreach($fases as $fase): ?>
+                                <option value="<?= $fase['id'] ?>" <?= $fase_seleccionada==$fase['id']?'selected':'' ?>>
+                                    <?= ucfirst(str_replace('_', ' ', $fase['nombre'])) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <input type="hidden" name="campeonato" value="<?= $campeonato_id ?>">
+                        <input type="hidden" name="categoria" value="<?= $categoria_id ?>">
+                    </div>
+                    <?php endif; ?>
+                    <?php elseif($categoria_id): ?>
+                    <div class="col-md-3">
+                        <select name="fecha" class="form-select" onchange="this.form.submit()">
+                            <option value="">Seleccionar Fecha</option>
+                            <?php foreach($fechas_categoria as $f): ?>
+                                <option value="<?= $f['id'] ?>" <?= $fecha_id==$f['id']?'selected':'' ?>>
+                                    Fecha <?= $f['numero_fecha'] ?> (<?= date('d/m/Y', strtotime($f['fecha_programada'])) ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                         <input type="hidden" name="campeonato" value="<?= $campeonato_id ?>">
                         <input type="hidden" name="categoria" value="<?= $categoria_id ?>">
                     </div>
                     <?php endif; ?>
                 </form>
                 
-                <?php if($es_torneo_zonas && $categoria_id): ?>
+                <?php if($fase_seleccionada && !empty($partidos_eliminatorias)): ?>
+                    <!-- Mostrar partidos de fase eliminatoria -->
+                    <?php 
+                    $fase_info = null;
+                    foreach($fases as $f) {
+                        if ($f['id'] == $fase_seleccionada) {
+                            $fase_info = $f;
+                            break;
+                        }
+                    }
+                    ?>
+                    <div class="alert alert-primary">
+                        <i class="fas fa-trophy"></i> <strong>Fase Eliminatoria:</strong> 
+                        <?= ucfirst(str_replace('_', ' ', $fase_info['nombre'] ?? 'Desconocida')) ?>
+                    </div>
+                    
+                    <div class="row">
+                        <?php foreach ($partidos_eliminatorias as $p): 
+                            renderPartidoCard($p);
+                        endforeach; ?>
+                    </div>
+                
+                <?php elseif($es_torneo_zonas && $categoria_id): ?>
                     <!-- Mostrar partidos de zonas -->
                     <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i> <strong>Torneo por Zonas:</strong> 
+                        <i class="fas fa-info-circle"></i> <strong>Torneo por Zonas - Fase de Grupos:</strong> 
                         <?php if($jornada_seleccionada): ?>
                             Mostrando partidos de la Jornada <?= $jornada_seleccionada ?> agrupados por zona.
                         <?php else: ?>
-                            Selecciona una jornada para ver los partidos agrupados por zona.
+                            Selecciona una jornada para ver los partidos agrupados por zona<?= $tiene_eliminatorias ? ', o selecciona una fase eliminatoria.' : '.' ?>
                         <?php endif; ?>
                     </div>
                     
@@ -688,7 +774,7 @@ if ($es_torneo_zonas && $categoria_id) {
                             <i class="fas fa-exclamation-triangle"></i> <strong>No hay partidos generados.</strong>
                             <p class="mb-0 mt-2">El fixture aún no ha sido generado para este torneo. 
                             <?php if ($formato_zonas): ?>
-                                <a href="crear_torneo_zonas.php?formato_id=<?= $formato_zonas['id'] ?>" class="btn btn-sm btn-primary">
+                                <a href="campeonatos_zonas_fixture.php?formato_id=<?= $formato_zonas['id'] ?>" class="btn btn-sm btn-primary">
                                     <i class="fas fa-magic"></i> Generar Fixture
                                 </a>
                             <?php endif; ?>
@@ -712,71 +798,8 @@ if ($es_torneo_zonas && $categoria_id) {
                                     <?php else: ?>
                                         <div class="row">
                                             <?php foreach ($data_zona['partidos'] as $p): 
-                                                $tiene_cancha_y_horario = !empty($p['cancha']) && !empty($p['hora_partido']);
-                                                $clase_card = 'partido-programado';
-                                                if (!$tiene_cancha_y_horario) $clase_card = 'partido-sin-datos';
-                                                elseif ($p['estado'] == 'finalizado') $clase_card = 'partido-finalizado';
-                                                elseif ($p['estado'] == 'en_curso') $clase_card = 'partido-en-juego';
-                                            ?>
-                                                <div class="col-md-6 mb-3">
-                                                    <div class="card partido-card <?= $clase_card ?>">
-                                                        <div class="card-header">
-                                                            <?php if($p['estado'] == 'finalizado'): ?>
-                                                                <div class="resultado-final">
-                                                                    <strong style="color:<?= $p['color_local'] ?>"><?= htmlspecialchars($p['equipo_local']) ?> <?= $p['goles_local'] ?></strong>
-                                                                    <span class="mx-3">VS</span>
-                                                                    <strong style="color:<?= $p['color_visitante'] ?>"><?= htmlspecialchars($p['equipo_visitante']) ?> <?= $p['goles_visitante'] ?></strong>
-                                                                </div>
-                                                            <?php else: ?>
-                                                                <div class="d-flex justify-content-between align-items-center">
-                                                                    <div>
-                                                                        <strong style="color:<?= $p['color_local'] ?>"><?= htmlspecialchars($p['equipo_local']) ?></strong> vs 
-                                                                        <strong style="color:<?= $p['color_visitante'] ?>"><?= htmlspecialchars($p['equipo_visitante']) ?></strong>
-                                                                    </div>
-                                                                    <span class="badge bg-<?= $p['estado']=='finalizado'?'success':($p['estado']=='en_curso'?'danger':'primary') ?>">
-                                                                        <?= ucfirst(str_replace('_', ' ', $p['estado'])) ?>
-                                                                    </span>
-                                                                </div>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                        <div class="card-body">
-                                                            <div class="row">
-                                                                <div class="col-md-6">
-                                                                    <p class="mb-1">
-                                                                        <i class="fas fa-calendar"></i> 
-                                                                        <strong>Fecha:</strong> <?= $p['fecha_partido'] ? date('d/m/Y', strtotime($p['fecha_partido'])) : 'Sin fecha' ?>
-                                                                    </p>
-                                                                    <p class="mb-1">
-                                                                        <i class="fas fa-map-marker-alt"></i> 
-                                                                        <strong>Cancha:</strong> <?= $p['cancha'] ?: '<span class="text-danger">Sin asignar</span>' ?>
-                                                                    </p>
-                                                                    <p class="mb-1">
-                                                                        <i class="fas fa-clock"></i> 
-                                                                        <strong>Hora:</strong> <?= $p['hora_partido'] ? date('H:i', strtotime($p['hora_partido'])) : '<span class="text-danger">Sin horario</span>' ?>
-                                                                    </p>
-                                                                </div>
-                                                                <div class="col-md-6 text-end">
-                                                                    <?php if(!$tiene_cancha_y_horario): ?>
-                                                                        <button class="btn btn-sm btn-disabled-info" disabled>
-                                                                            <i class="fas fa-exclamation-triangle"></i> Sin Datos
-                                                                        </button>
-                                                                    <?php elseif($p['estado'] == 'finalizado'): ?>
-                                                                        <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#modalResultado" 
-                                                                            onclick="editarPartido(<?= $p['id'] ?>, <?= $p['equipo_local_id'] ?>, <?= $p['equipo_visitante_id'] ?>, '<?= addslashes($p['equipo_local']) ?>', '<?= addslashes($p['equipo_visitante']) ?>', <?= $p['goles_local'] ?>, <?= $p['goles_visitante'] ?>, '<?= addslashes($p['observaciones'] ?? '') ?>')">
-                                                                            <i class="fas fa-edit"></i> Editar
-                                                                        </button>
-                                                                    <?php else: ?>
-                                                                        <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalResultado" 
-                                                                            onclick="cargarPartido(<?= $p['id'] ?>, <?= $p['equipo_local_id'] ?>, <?= $p['equipo_visitante_id'] ?>, '<?= addslashes($p['equipo_local']) ?>', '<?= addslashes($p['equipo_visitante']) ?>')">
-                                                                            <i class="fas fa-plus"></i> Cargar Resultado
-                                                                        </button>
-                                                                    <?php endif; ?>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            <?php endforeach; ?>
+                                                renderPartidoCard($p);
+                                            endforeach; ?>
                                         </div>
                                     <?php endif; ?>
                                 </div>
@@ -810,12 +833,7 @@ if ($es_torneo_zonas && $categoria_id) {
                                     
                                     <?php if (empty($data_zona['partidos_por_jornada'])): ?>
                                         <div class="alert alert-warning">
-                                            <i class="fas fa-exclamation-triangle"></i> No hay partidos generados para esta zona. 
-                                            <?php if ($formato_zonas): ?>
-                                                <a href="crear_torneo_zonas.php?formato_id=<?= $formato_zonas['id'] ?>" class="btn btn-sm btn-primary">
-                                                    <i class="fas fa-magic"></i> Generar Fixture
-                                                </a>
-                                            <?php endif; ?>
+                                            <i class="fas fa-exclamation-triangle"></i> No hay partidos generados para esta zona.
                                         </div>
                                     <?php else: ?>
                                     <?php foreach ($data_zona['partidos_por_jornada'] as $jornada => $partidos_jornada): ?>
@@ -824,71 +842,8 @@ if ($es_torneo_zonas && $categoria_id) {
                                         </h5>
                                         <div class="row">
                                             <?php foreach ($partidos_jornada as $p): 
-                                                $tiene_cancha_y_horario = !empty($p['cancha']) && !empty($p['hora_partido']);
-                                                $clase_card = 'partido-programado';
-                                                if (!$tiene_cancha_y_horario) $clase_card = 'partido-sin-datos';
-                                                elseif ($p['estado'] == 'finalizado') $clase_card = 'partido-finalizado';
-                                                elseif ($p['estado'] == 'en_curso') $clase_card = 'partido-en-juego';
-                                            ?>
-                                                <div class="col-md-6">
-                                                    <div class="card partido-card <?= $clase_card ?>">
-                                                        <div class="card-header">
-                                                            <?php if($p['estado'] == 'finalizado'): ?>
-                                                                <div class="resultado-final">
-                                                                    <strong style="color:<?= $p['color_local'] ?>"><?= htmlspecialchars($p['equipo_local']) ?> <?= $p['goles_local'] ?></strong>
-                                                                    <span class="mx-3">VS</span>
-                                                                    <strong style="color:<?= $p['color_visitante'] ?>"><?= htmlspecialchars($p['equipo_visitante']) ?> <?= $p['goles_visitante'] ?></strong>
-                                                                </div>
-                                                            <?php else: ?>
-                                                                <div class="d-flex justify-content-between align-items-center">
-                                                                    <div>
-                                                                        <strong style="color:<?= $p['color_local'] ?>"><?= htmlspecialchars($p['equipo_local']) ?></strong> vs 
-                                                                        <strong style="color:<?= $p['color_visitante'] ?>"><?= htmlspecialchars($p['equipo_visitante']) ?></strong>
-                                                                    </div>
-                                                                    <span class="badge bg-<?= $p['estado']=='finalizado'?'success':($p['estado']=='en_curso'?'danger':'primary') ?>">
-                                                                        <?= ucfirst(str_replace('_', ' ', $p['estado'])) ?>
-                                                                    </span>
-                                                                </div>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                        <div class="card-body">
-                                                            <div class="row">
-                                                                <div class="col-md-6">
-                                                                    <p class="mb-1">
-                                                                        <i class="fas fa-calendar"></i> 
-                                                                        <strong>Fecha:</strong> <?= $p['fecha_partido'] ? date('d/m/Y', strtotime($p['fecha_partido'])) : 'Sin fecha' ?>
-                                                                    </p>
-                                                                    <p class="mb-1">
-                                                                        <i class="fas fa-map-marker-alt"></i> 
-                                                                        <strong>Cancha:</strong> <?= $p['cancha'] ?: '<span class="text-danger">Sin asignar</span>' ?>
-                                                                    </p>
-                                                                    <p class="mb-1">
-                                                                        <i class="fas fa-clock"></i> 
-                                                                        <strong>Hora:</strong> <?= $p['hora_partido'] ? date('H:i', strtotime($p['hora_partido'])) : '<span class="text-danger">Sin horario</span>' ?>
-                                                                    </p>
-                                                                </div>
-                                                                <div class="col-md-6 text-end">
-                                                                    <?php if(!$tiene_cancha_y_horario): ?>
-                                                                        <button class="btn btn-sm btn-disabled-info" disabled>
-                                                                            <i class="fas fa-exclamation-triangle"></i> Sin Datos
-                                                                        </button>
-                                                                    <?php elseif($p['estado'] == 'finalizado'): ?>
-                                                                        <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#modalResultado" 
-                                                                            onclick="editarPartido(<?= $p['id'] ?>, <?= $p['equipo_local_id'] ?>, <?= $p['equipo_visitante_id'] ?>, '<?= addslashes($p['equipo_local']) ?>', '<?= addslashes($p['equipo_visitante']) ?>', <?= $p['goles_local'] ?>, <?= $p['goles_visitante'] ?>, '<?= addslashes($p['observaciones'] ?? '') ?>')">
-                                                                            <i class="fas fa-edit"></i> Editar
-                                                                        </button>
-                                                                    <?php else: ?>
-                                                                        <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalResultado" 
-                                                                            onclick="cargarPartido(<?= $p['id'] ?>, <?= $p['equipo_local_id'] ?>, <?= $p['equipo_visitante_id'] ?>, '<?= addslashes($p['equipo_local']) ?>', '<?= addslashes($p['equipo_visitante']) ?>')">
-                                                                            <i class="fas fa-plus"></i> Cargar Resultado
-                                                                        </button>
-                                                                    <?php endif; ?>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            <?php endforeach; ?>
+                                                renderPartidoCard($p);
+                                            endforeach; ?>
                                         </div>
                                     <?php endforeach; ?>
                                     <?php endif; ?>
@@ -946,15 +901,9 @@ if ($es_torneo_zonas && $categoria_id) {
                                     </div>
                                     <div class="col-md-6 text-end">
                                         <?php if(!$tiene_cancha_y_horario): ?>
-                                            <button class="btn btn-sm btn-disabled-info" disabled title="Faltan datos: cancha y/o horario">
+                                            <button class="btn btn-sm btn-disabled-info" disabled>
                                                 <i class="fas fa-exclamation-triangle"></i> Sin Datos
                                             </button>
-                                            <small class="d-block text-muted mt-1">Asignar cancha y horario primero</small>
-                                        <?php elseif($p['estado'] == 'en_curso'): ?>
-                                            <button class="btn btn-sm btn-warning" disabled>
-                                                <i class="fas fa-broadcast-tower"></i> En Curso
-                                            </button>
-                                            <small class="d-block text-muted mt-1">No se puede modificar</small>
                                         <?php elseif($p['estado'] == 'finalizado'): ?>
                                             <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#modalResultado" 
                                                 onclick="editarPartido(<?= $p['id'] ?>, <?= $p['equipo_local_id'] ?>, <?= $p['equipo_visitante_id'] ?>, '<?= addslashes($p['equipo_local']) ?>', '<?= addslashes($p['equipo_visitante']) ?>', <?= $p['goles_local'] ?>, <?= $p['goles_visitante'] ?>, '<?= addslashes($p['observaciones']) ?>')">
@@ -973,10 +922,10 @@ if ($es_torneo_zonas && $categoria_id) {
                     </div>
                     <?php endforeach; ?>
                 </div>
-                <?php elseif($fecha_id): ?>
+                <?php elseif($fecha_id || $jornada_seleccionada || $fase_seleccionada): ?>
                 <div class="text-center py-5">
                     <i class="fas fa-calendar-times fa-4x text-muted mb-3"></i>
-                    <h4>No hay partidos para esta fecha</h4>
+                    <h4>No hay partidos para esta fecha/jornada/fase</h4>
                 </div>
                 <?php else: ?>
                 <div class="text-center py-5">
@@ -1160,7 +1109,7 @@ if ($es_torneo_zonas && $categoria_id) {
             cargarJugadoresEquipo(equipoVisitante, 'visitante');
         }
         
-        async function editarPartido(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante, golesLocal, golesVisitante, observaciones) {
+        function editarPartido(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante, golesLocal, golesVisitante, observaciones) {
             resetModal();
             document.getElementById('modal_action').value = 'editar_resultado';
             document.getElementById('modal_title').textContent = 'Editar Resultado';
@@ -1169,13 +1118,11 @@ if ($es_torneo_zonas && $categoria_id) {
             document.getElementById('goles_local').value = golesLocal;
             document.getElementById('goles_visitante').value = golesVisitante;
             document.getElementById('observaciones').value = observaciones;
-            // Esperar a que se carguen los jugadores antes de cargar eventos
-            await Promise.all([
-                cargarJugadoresEquipo(equipoLocal, 'local', true),
-                cargarJugadoresEquipo(equipoVisitante, 'visitante', true)
-            ]);
-            // Ahora cargar eventos después de que los jugadores estén cargados
-            await loadExistingEvents(id);
+            cargarJugadoresEquipo(equipoLocal, 'local', true);
+            cargarJugadoresEquipo(equipoVisitante, 'visitante', true);
+            setTimeout(() => {
+                loadExistingEvents(id);
+            }, 500);
         }
         
         function fillModalData(id, equipoLocal, equipoVisitante, nombreLocal, nombreVisitante) {
@@ -1235,7 +1182,6 @@ if ($es_torneo_zonas && $categoria_id) {
             } catch (error) {
                 console.error('Error:', error);
                 container.innerHTML = '<div class="text-center text-danger py-3">Error al cargar jugadores</div>';
-                throw error; // Re-lanzar para que Promise.all detecte el error
             }
         }
         
@@ -1289,18 +1235,15 @@ if ($es_torneo_zonas && $categoria_id) {
                 const display = numero ? `#${numero} - ${j.apellido_nombre}` : j.apellido_nombre;
                 options += `<option value="${j.id}" data-numero="${numero}">${display}</option>`;
             });
-            // Usar timestamp para asegurar índices únicos, incluso si se eliminan elementos
-            const index = Date.now() + Math.random();
+            const index = container.children.length;
             div.innerHTML = `
                 <div class="col-2">
                     <input type="number" class="form-control text-center" placeholder="N°" 
-                           onchange="seleccionarJugadorPorNumero(this, 'gol', '${index}', '${lado}')">
+                           onchange="seleccionarJugadorPorNumero(this, 'gol', ${index}, '${lado}')">
                 </div>
                 <div class="col-8">
                     <select class="form-select" name="goles[${index}][jugador_id]" 
-                            id="gol_${lado}_${index}" 
-                            data-lado="${lado}"
-                            onchange="updateGoles('${lado}')" required>
+                            id="gol_${lado}_${index}" required>
                         ${options}
                     </select>
                 </div>
@@ -1364,7 +1307,6 @@ if ($es_torneo_zonas && $categoria_id) {
                 if (option.dataset.numero == numero) {
                     select.value = option.value;
                     select.classList.remove('is-invalid');
-                    updateGoles(lado);
                     return;
                 }
             }
@@ -1383,16 +1325,8 @@ if ($es_torneo_zonas && $categoria_id) {
         
         function updateGoles(lado) {
             const container = document.getElementById('goles' + lado.charAt(0).toUpperCase() + lado.slice(1) + 'Container');
-            // Contar solo los goles que tienen un jugador seleccionado
-            const golesItems = container.querySelectorAll('.gol-item');
-            let count = 0;
-            golesItems.forEach(item => {
-                const select = item.querySelector('select[name*="jugador_id"]');
-                if (select && select.value && select.value !== '') {
-                    count++;
-                }
-            });
-            document.getElementById('goles_' + lado).value = count;
+            const goles = container.querySelectorAll('.gol-item').length;
+            document.getElementById('goles_' + lado).value = goles;
         }
         
         async function loadExistingEvents(partidoId) {
@@ -1401,7 +1335,6 @@ if ($es_torneo_zonas && $categoria_id) {
                 if (!response.ok) throw new Error('Error al cargar eventos');
                 const data = await response.json();
                 
-                // Cargar números de camiseta de jugadores que participaron
                 if (data.jugadores_partido && Array.isArray(data.jugadores_partido)) {
                     data.jugadores_partido.forEach(jp => {
                         const lado = jp.equipo_id == document.getElementById('equipo_local_id').value ? 'local' : 'visitante';
@@ -1413,7 +1346,6 @@ if ($es_torneo_zonas && $categoria_id) {
                     });
                 }
                 
-                // Cargar TODOS los goles (incluyendo múltiples del mismo jugador)
                 if (data.goles && Array.isArray(data.goles)) {
                     for (const evento of data.goles) {
                         const lado = evento.equipo_id == document.getElementById('equipo_local_id').value ? 'local' : 'visitante';
@@ -1422,44 +1354,26 @@ if ($es_torneo_zonas && $categoria_id) {
                         const ultimoSelect = container.querySelector('.gol-item:last-child select[name*="jugador_id"]');
                         if (ultimoSelect) {
                             ultimoSelect.value = evento.jugador_id;
-                            // Disparar evento change para actualizar contador
-                            ultimoSelect.dispatchEvent(new Event('change'));
                         }
                     }
-                    // Actualizar contadores de goles después de cargar todos
-                    updateGoles('local');
-                    updateGoles('visitante');
                 }
                 
-                // Cargar todas las tarjetas
                 if (data.tarjetas && Array.isArray(data.tarjetas)) {
                     for (const evento of data.tarjetas) {
-                        // Comparar como números para evitar problemas de tipo
-                        const equipoLocalId = parseInt(document.getElementById('equipo_local_id').value);
-                        const eventoEquipoId = parseInt(evento.equipo_id);
-                        const lado = eventoEquipoId === equipoLocalId ? 'local' : 'visitante';
+                        const lado = evento.equipo_id == document.getElementById('equipo_local_id').value ? 'local' : 'visitante';
                         await addTarjeta(lado);
-                        // Esperar un momento para que el DOM se actualice
-                        await new Promise(resolve => setTimeout(resolve, 50));
                         const container = document.getElementById('tarjetas' + lado.charAt(0).toUpperCase() + lado.slice(1) + 'Container');
                         const ultimaFila = container.querySelector('.tarjeta-item:last-child');
                         if (ultimaFila) {
                             const selectJugador = ultimaFila.querySelector('select[name*="jugador_id"]');
                             const selectTipo = ultimaFila.querySelector('select[name*="tipo"]');
-                            if (selectJugador) {
-                                selectJugador.value = evento.jugador_id;
-                                selectJugador.dispatchEvent(new Event('change'));
-                            }
-                            if (selectTipo) {
-                                selectTipo.value = evento.tipo_evento;
-                                selectTipo.dispatchEvent(new Event('change'));
-                            }
+                            if (selectJugador) selectJugador.value = evento.jugador_id;
+                            if (selectTipo) selectTipo.value = evento.tipo_evento;
                         }
                     }
                 }
             } catch (error) {
                 console.error('Error cargando eventos:', error);
-                alert('Error al cargar los eventos del partido. Por favor, recarga la página.');
             }
         }
         
@@ -1504,8 +1418,8 @@ if ($es_torneo_zonas && $categoria_id) {
             const totalLocal = cantNumerosLocal === 0 ? jugadoresLocal.length + ' (todos)' : cantNumerosLocal;
             const totalVisitante = cantNumerosVisitante === 0 ? jugadoresVisitante.length + ' (todos)' : cantNumerosVisitante;
             const mensaje = action === 'cargar_resultado' ? 
-                `¿Confirmar resultado ${nombreLocal} ${golesLocal} - ${golesVisitante} ${nombreVisitante}?\nJugadores que participaron:\n- Local: ${totalLocal}\n- Visitante: ${totalVisitante}\nLas sanciones se descontarán automáticamente.` :
-                `¿Confirmar cambios en el resultado ${nombreLocal} ${golesLocal} - ${golesVisitante} ${nombreVisitante}?\nJugadores que participaron:\n- Local: ${totalLocal}\n- Visitante: ${totalVisitante}\nLas sanciones se actualizarán automáticamente.`;
+                `¿Confirmar resultado ${nombreLocal} ${golesLocal} - ${golesVisitante} ${nombreVisitante}?\nJugadores que participaron:\n- Local: ${totalLocal}\n- Visitante: ${totalVisitante}\n\nNOTA: El sistema detectará automáticamente las dobles amarillas y las convertirá en roja (1 fecha). Las sanciones se descontarán automáticamente.` :
+                `¿Confirmar cambios en el resultado ${nombreLocal} ${golesLocal} - ${golesVisitante} ${nombreVisitante}?\nJugadores que participaron:\n- Local: ${totalLocal}\n- Visitante: ${totalVisitante}\n\nNOTA: El sistema detectará automáticamente las dobles amarillas y las convertirá en roja (1 fecha). Las sanciones se actualizarán automáticamente.`;
             if (!confirm(mensaje)) {
                 e.preventDefault();
                 return false;
