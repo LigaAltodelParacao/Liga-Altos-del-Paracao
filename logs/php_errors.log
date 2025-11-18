@@ -1,0 +1,232 @@
+[07-Nov-2025 12:04:09 America/Argentina/Buenos_Aires] PHP Fatal error:  Cannot redeclare cumplirSancionesAutomaticas() (previously declared in /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php:28) in /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/admin/include/sanciones_functions.php on line 91
+[07-Nov-2025 12:06:15 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:06:17 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:06:19 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:06:20 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:06:31 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:06:36 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:06:39 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:07:33 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:07:41 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:07:43 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:07:44 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:07:46 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:09:13 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:09:16 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:09:17 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 12:09:19 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php - Sistema de sanciones automáticas no disponible
+[07-Nov-2025 18:30:22 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[07-Nov-2025 18:30:22 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[07-Nov-2025 18:30:25 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[07-Nov-2025 18:30:25 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[07-Nov-2025 18:30:28 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[07-Nov-2025 18:30:28 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[07-Nov-2025 18:30:30 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[07-Nov-2025 18:30:30 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[07-Nov-2025 18:41:12 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[07-Nov-2025 18:41:12 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[07-Nov-2025 18:41:15 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[07-Nov-2025 18:41:15 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[07-Nov-2025 18:41:16 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[07-Nov-2025 18:41:16 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[07-Nov-2025 18:41:18 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[07-Nov-2025 18:41:18 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[07-Nov-2025 18:41:48 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[07-Nov-2025 18:41:48 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:31:25 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:31:25 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:31:27 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:31:27 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:31:29 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:31:29 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:31:31 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:31:31 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:31:46 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:31:46 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:32:01 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:32:01 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:32:14 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:32:14 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:32:30 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:32:30 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:33:22 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:33:22 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:33:26 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:33:26 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:33:40 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:33:40 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:33:56 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:33:56 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:34:04 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:34:04 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:34:14 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:34:14 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:34:28 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:34:28 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:34:37 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:34:37 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:34:47 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:34:47 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:34:53 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:34:53 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:34:56 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:34:56 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:35:19 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:35:19 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:35:27 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:35:27 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:35:32 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:35:32 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:35:36 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:35:36 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:35:42 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:35:42 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:35:53 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:35:53 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:35:58 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:35:58 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:36:02 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:36:02 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:36:07 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:36:07 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:36:12 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:36:12 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:36:19 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:36:19 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:36:31 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:36:31 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:36:37 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:36:37 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:36:45 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:36:45 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:36:50 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:36:50 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:36:57 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:36:57 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:37:06 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:37:06 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:37:13 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:37:13 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:37:19 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:37:19 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:37:24 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:37:24 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:37:29 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:37:29 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 10:37:38 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 10:37:38 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[10-Nov-2025 11:37:58 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[10-Nov-2025 11:37:58 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:08:23 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:08:23 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:08:25 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:08:25 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:08:27 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:08:27 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:08:28 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:08:28 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:40:55 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:40:55 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:40:57 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:40:57 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:40:59 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:40:59 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:41:00 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:41:00 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:41:19 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:41:19 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:41:33 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:41:33 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:41:40 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:41:40 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:42:25 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:42:25 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:42:42 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:42:42 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:42:45 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:42:45 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:42:51 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:42:51 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:42:56 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:42:56 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:43:01 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:43:01 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:43:06 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:43:06 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:43:13 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:43:13 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:43:25 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:43:25 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:43:30 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:43:30 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:43:36 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:43:36 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:43:43 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:43:43 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:44:23 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:44:23 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:44:31 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:44:31 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:53:01 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:53:01 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:53:05 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:53:05 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:53:08 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:53:08 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 11:58:49 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 11:58:49 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:02:57 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:02:57 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:03:00 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:03:00 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:03:01 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:03:01 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:03:04 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:03:04 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:03:09 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:03:09 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:03:13 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:03:13 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:03:16 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:03:16 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:03:18 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:03:18 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:03:22 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:03:22 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:03:25 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:03:25 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:03:27 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:03:27 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:19:39 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:19:39 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:19:41 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:19:41 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:19:43 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:19:43 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:22:31 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:22:31 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:22:32 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:22:32 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:22:34 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:22:34 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:29:21 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:29:21 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:29:23 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:29:23 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:29:25 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:29:25 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:29:34 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:29:34 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[11-Nov-2025 12:53:25 America/Argentina/Buenos_Aires] ADVERTENCIA: No se encontró include/sanciones_functions.php en: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/include/sanciones_functions.php
+[11-Nov-2025 12:53:25 America/Argentina/Buenos_Aires] Directorio actual: /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html
+[12-Nov-2025 09:27:33 America/Argentina/Buenos_Aires] Error en control_fechas.php: SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1100-1134' for key 'unique_jugador_partido'
+[12-Nov-2025 09:29:00 America/Argentina/Buenos_Aires] Error en control_fechas.php: SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1100-1134' for key 'unique_jugador_partido'
+[12-Nov-2025 11:17:34 America/Argentina/Buenos_Aires] PHP Warning:  Undefined variable $fase in /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/admin/funciones_torneos_zonas.php on line 637
+[12-Nov-2025 11:17:34 America/Argentina/Buenos_Aires] PHP Warning:  Trying to access array offset on value of type null in /home/u959527289/domains/salmon-frog-819056.hostingersite.com/public_html/admin/funciones_torneos_zonas.php on line 637
+[12-Nov-2025 12:51:15 America/Argentina/Buenos_Aires] Error en generarFixtureEliminatorias: Los partidos eliminatorios ya fueron generados
+[12-Nov-2025 12:51:31 America/Argentina/Buenos_Aires] Error en generarFixtureEliminatorias: Los partidos eliminatorios ya fueron generados
+[12-Nov-2025 20:39:02 America/Argentina/Buenos_Aires] Error en generarFixtureEliminatorias: No hay fases eliminatorias configuradas
+[12-Nov-2025 20:46:30 America/Argentina/Buenos_Aires] Error en generarFixtureEliminatorias: Los partidos eliminatorios ya fueron generados
+[12-Nov-2025 20:46:33 America/Argentina/Buenos_Aires] Error en generarFixtureEliminatorias: Los partidos eliminatorios ya fueron generados
+[12-Nov-2025 21:04:59 America/Argentina/Buenos_Aires] Error en generarFixtureEliminatorias: Los partidos eliminatorios ya fueron generados
+[12-Nov-2025 21:05:07 America/Argentina/Buenos_Aires] Error en generarFixtureEliminatorias: Los partidos eliminatorios ya fueron generados
